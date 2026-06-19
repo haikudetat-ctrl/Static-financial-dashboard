@@ -54,6 +54,17 @@ export async function setupOrganizationAction(
     };
   }
 
+  const { error: profileError } = await admin.from("profiles").upsert(
+    {
+      id: user.id,
+      email: user.email ?? "",
+      name: user.user_metadata?.name ?? "",
+    },
+    { onConflict: "id" },
+  );
+
+  if (profileError) return { message: profileError.message };
+
   const { data: org, error: orgError } = await admin
     .from("organizations")
     .insert({ name, slug })
