@@ -69,20 +69,15 @@ export async function POST(request: Request) {
       parserVersion,
     });
 
-    // Re-extract if previous attempt produced rows but no usable normalized data
+    // Re-extract if previous attempt never created mapping queue items
     if (result.duplicate && result.existingImportId) {
-      const { data: firstRow } = await supabase
-        .from("source_import_rows")
-        .select("normalized_data")
-        .eq("source_import_id", result.existingImportId)
+      const { data: queueItem } = await supabase
+        .from("mapping_queue_items")
+        .select("id")
+        .eq("source_context->>import_id", result.existingImportId)
         .limit(1)
         .maybeSingle();
-      const allEmpty =
-        firstRow &&
-        Object.values(
-          (firstRow.normalized_data as Record<string, unknown>) ?? {},
-        ).every((v) => v === "" || v === 0 || v === false);
-      if (allEmpty) {
+      if (!queueItem) {
         await supabase
           .from("source_import_rows")
           .delete()

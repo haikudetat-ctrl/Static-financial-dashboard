@@ -61,17 +61,67 @@ serve(async (req) => {
 
     await supabase.from("source_import_rows").insert(stagedRows);
 
+    // Push each staged row into the mapping queue for user review
+    const queueItems = stagedRows
+      .filter((r) => {
+        const raw = r.raw_data as Record<string, string>;
+        return Object.values(raw).some((v) => v.trim());
+      })
+      .map((r) => {
+        const raw = r.raw_data as Record<string, string>;
+        const n = r.normalized_data as Record<string, unknown>;
+        const namedFields = [
+          "item_name",
+          "menu_item_name",
+          "item",
+          "Item",
+          "item_name",
+          "Name",
+          "name",
+        ];
+        let sourceValue = "";
+        for (const field of [...namedFields, ...Object.keys(raw)]) {
+          const v = n[field] || raw[field];
+          if (v && String(v).trim()) {
+            sourceValue = String(v).trim();
+            break;
+          }
+        }
+        return {
+          organization_id: organizationId,
+          queue_type: "toast_item_to_inventory",
+          status: "pending",
+          source_value: sourceValue,
+          source_context: {
+            import_id: importId,
+            row_index: r.row_index,
+            import_source_type: sourceType,
+            raw_data: raw,
+            normalized_data: n,
+          },
+        };
+      });
+
+    if (queueItems.length > 0) {
+      await supabase.from("mapping_queue_items").insert(queueItems);
+    }
+
     await supabase
       .from("source_imports")
       .update({
-        status: "staged",
+        status: "mapping",
         row_count: rows.length,
         parser_version: "1.0.0",
       })
       .eq("id", importId);
 
     return new Response(
-      JSON.stringify({ success: true, rowCount: rows.length, businessDate }),
+      JSON.stringify({
+        success: true,
+        rowCount: rows.length,
+        businessDate,
+        mappingQueueItems: queueItems.length,
+      }),
       { headers: { "Content-Type": "application/json" } },
     );
   } catch (error) {
@@ -182,6 +232,8 @@ function normalizeToastRow(
         "Item Name",
         "MenuItemName",
         "Menu Item Name",
+        "Item",
+        "item_name",
       ),
       business_date: matchCol(
         row,
