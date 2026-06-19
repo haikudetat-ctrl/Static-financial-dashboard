@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f3f1ec;
+  --foreground: #20241f;
+  --surface: #fbfaf7;
+  --surface-strong: #ffffff;
+  --muted: #686d65;
+  --line: #dedbd2;
+  --accent: #b75f22;
+  --accent-strong: #8f4215;
+  --success: #3f6d55;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  border-color: var(--line);
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  background:
+    linear-gradient(rgba(47, 54, 45, 0.035) 1px, transparent 1px),
+    var(--background);
+  background-size: 100% 28px;
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), sans-serif;
+}
+
+button,
+a,
+input {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+@media print {
+  nav,
+  .no-print {
+    display: none !important;
+  }
+  header,
+  footer,
+  button,
+  form {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  pre {
+    border: none !important;
+    padding: 0 !important;
+    font-size: 10pt !important;
+    white-space: pre !important;
+  }
+  .mx-auto {
+    max-width: 100% !important;
+  }
+}
