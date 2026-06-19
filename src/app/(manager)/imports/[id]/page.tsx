@@ -128,10 +128,17 @@ export default async function ImportDetailPage({
                       </span>
                     </td>
                     <td className="max-w-md truncate py-2 pr-4 font-mono text-xs text-[var(--muted)]">
-                      {JSON.stringify(row.normalized_data).slice(0, 120)}
-                      {JSON.stringify(row.normalized_data).length > 120
-                        ? "…"
-                        : ""}
+                      {(() => {
+                        const normalized = row.normalized_data ?? {};
+                        const hasData = Object.values(normalized).some(
+                          (v) => v !== "" && v !== 0 && v !== false,
+                        );
+                        const obj = hasData ? normalized : (row.raw_data ?? {});
+                        const json = JSON.stringify(obj);
+                        return json.length > 120
+                          ? json.slice(0, 120) + "…"
+                          : json;
+                      })()}
                     </td>
                   </tr>
                 ))}

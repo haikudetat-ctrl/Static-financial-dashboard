@@ -69,6 +69,29 @@ export async function POST(request: Request) {
       parserVersion,
     });
 
+    // Re-extract if previous attempt produced rows but no usable normalized data
+    if (result.duplicate && result.existingImportId) {
+      const { data: firstRow } = await supabase
+        .from("source_import_rows")
+        .select("normalized_data")
+        .eq("source_import_id", result.existingImportId)
+        .limit(1)
+        .maybeSingle();
+      const allEmpty =
+        firstRow &&
+        Object.values(
+          (firstRow.normalized_data as Record<string, unknown>) ?? {},
+        ).every((v) => v === "" || v === 0 || v === false);
+      if (allEmpty) {
+        await supabase
+          .from("source_import_rows")
+          .delete()
+          .eq("source_import_id", result.existingImportId);
+        result.duplicate = false;
+        result.importId = result.existingImportId;
+      }
+    }
+
     // Automatically trigger Edge Function extraction
     if (!result.duplicate) {
       const functionName =

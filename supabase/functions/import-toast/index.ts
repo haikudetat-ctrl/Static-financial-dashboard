@@ -157,15 +157,36 @@ function normalizeToastRow(
 ): Record<string, unknown> {
   if (sourceType === "toast_pmix") {
     return {
-      item_guid: row["ItemGuid"] || row["Item GUID"] || "",
-      item_name: row["ItemName"] || row["Item Name"] || "",
-      business_date: row["BusinessDate"] || row["Business Date"] || "",
+      item_guid:
+        row["ItemGuid"] ||
+        row["Item GUID"] ||
+        row["MenuItemGUID"] ||
+        row["Menu Item GUID"] ||
+        "",
+      item_name:
+        row["ItemName"] ||
+        row["Item Name"] ||
+        row["MenuItemName"] ||
+        row["Menu Item Name"] ||
+        "",
+      business_date:
+        row["BusinessDate"] ||
+        row["Business Date"] ||
+        row["PeriodDate"] ||
+        row["Period Date"] ||
+        row["DayDate"] ||
+        row["Day Date"] ||
+        "",
       quantity_sold: parseFloat(row["Quantity"] || row["Qty"] || "0"),
       net_sales: parseFloat(
         row["NetSales"] || row["Net Sales"] || row["Amount"] || "0",
       ),
-      void_quantity: parseFloat(row["VoidQuantity"] || row["Void Qty"] || "0"),
-      comp_quantity: parseFloat(row["CompQuantity"] || row["Comp Qty"] || "0"),
+      void_quantity: parseFloat(
+        row["VoidQuantity"] || row["Void Qty"] || row["VoidQuantity"] || "0",
+      ),
+      comp_quantity: parseFloat(
+        row["CompQuantity"] || row["Comp Qty"] || row["CompQuantity"] || "0",
+      ),
       category: row["Category"] || row["SalesCategory"] || "",
       menu_group: row["MenuGroup"] || row["Menu Group"] || "",
       service_period: row["ServicePeriod"] || row["Service Period"] || "",
@@ -174,7 +195,12 @@ function normalizeToastRow(
 
   if (sourceType === "toast_sales_summary") {
     return {
-      business_date: row["BusinessDate"] || row["Date"] || "",
+      business_date:
+        row["BusinessDate"] ||
+        row["Date"] ||
+        row["PeriodDate"] ||
+        row["DayDate"] ||
+        "",
       net_sales: parseFloat(row["NetSales"] || row["Net Sales"] || "0"),
       category: row["Category"] || row["SalesCategory"] || "",
       total_transactions: parseFloat(
