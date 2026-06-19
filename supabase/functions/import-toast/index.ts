@@ -151,60 +151,83 @@ function extractBusinessDate(
   return match?.[1] ?? "";
 }
 
+function matchCol(row: Record<string, string>, ...aliases: string[]): string {
+  for (const alias of aliases) {
+    if (alias in row) return row[alias];
+  }
+  return "";
+}
+
+function parseFloatSafe(v: string): number {
+  const n = parseFloat(v.replace(/[^0-9.\-]/g, ""));
+  return isNaN(n) ? 0 : n;
+}
+
 function normalizeToastRow(
   row: Record<string, string>,
   sourceType: string,
 ): Record<string, unknown> {
   if (sourceType === "toast_pmix") {
     return {
-      item_guid:
-        row["ItemGuid"] ||
-        row["Item GUID"] ||
-        row["MenuItemGUID"] ||
-        row["Menu Item GUID"] ||
-        "",
-      item_name:
-        row["ItemName"] ||
-        row["Item Name"] ||
-        row["MenuItemName"] ||
-        row["Menu Item Name"] ||
-        "",
-      business_date:
-        row["BusinessDate"] ||
-        row["Business Date"] ||
-        row["PeriodDate"] ||
-        row["Period Date"] ||
-        row["DayDate"] ||
-        row["Day Date"] ||
-        "",
-      quantity_sold: parseFloat(row["Quantity"] || row["Qty"] || "0"),
-      net_sales: parseFloat(
-        row["NetSales"] || row["Net Sales"] || row["Amount"] || "0",
+      item_guid: matchCol(
+        row,
+        "ItemGuid",
+        "Item GUID",
+        "MenuItemGUID",
+        "Menu Item GUID",
       ),
-      void_quantity: parseFloat(
-        row["VoidQuantity"] || row["Void Qty"] || row["VoidQuantity"] || "0",
+      item_name: matchCol(
+        row,
+        "ItemName",
+        "Item Name",
+        "MenuItemName",
+        "Menu Item Name",
       ),
-      comp_quantity: parseFloat(
-        row["CompQuantity"] || row["Comp Qty"] || row["CompQuantity"] || "0",
+      business_date: matchCol(
+        row,
+        "BusinessDate",
+        "Business Date",
+        "PeriodDate",
+        "Period Date",
+        "DayDate",
+        "Day Date",
+        "Date",
       ),
-      category: row["Category"] || row["SalesCategory"] || "",
-      menu_group: row["MenuGroup"] || row["Menu Group"] || "",
-      service_period: row["ServicePeriod"] || row["Service Period"] || "",
+      quantity_sold: parseFloatSafe(
+        matchCol(row, "Quantity", "Qty", "Qty sold"),
+      ),
+      net_sales: parseFloatSafe(
+        matchCol(row, "NetSales", "Net Sales", "Amount"),
+      ),
+      void_quantity: parseFloatSafe(
+        matchCol(row, "VoidQuantity", "Void Qty", "Void amt"),
+      ),
+      comp_quantity: parseFloatSafe(matchCol(row, "CompQuantity", "Comp Qty")),
+      category: matchCol(row, "Category", "SalesCategory"),
+      menu_group: matchCol(row, "MenuGroup", "Menu Group", "Menu"),
+      service_period: matchCol(row, "ServicePeriod", "Service Period"),
+      tax_amount: parseFloatSafe(matchCol(row, "Tax amt")),
+      cogs: parseFloatSafe(matchCol(row, "COGS")),
+      subgroup: matchCol(row, "Subgroup"),
+      type: matchCol(row, "Type"),
+      deferred: matchCol(row, "Deferred"),
     };
   }
 
   if (sourceType === "toast_sales_summary") {
     return {
-      business_date:
-        row["BusinessDate"] ||
-        row["Date"] ||
-        row["PeriodDate"] ||
-        row["DayDate"] ||
-        "",
-      net_sales: parseFloat(row["NetSales"] || row["Net Sales"] || "0"),
-      category: row["Category"] || row["SalesCategory"] || "",
-      total_transactions: parseFloat(
-        row["Transactions"] || row["Count"] || "0",
+      business_date: matchCol(
+        row,
+        "BusinessDate",
+        "Business Date",
+        "PeriodDate",
+        "DayDate",
+        "Date",
+      ),
+      net_sales: parseFloatSafe(matchCol(row, "NetSales", "Net Sales")),
+      category: matchCol(row, "Category", "SalesCategory"),
+      total_transactions: parseFloatSafe(
+        matchCol(row, "Transactions", "Count"),
       ),
     };
   }

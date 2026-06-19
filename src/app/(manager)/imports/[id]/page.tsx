@@ -127,7 +127,7 @@ export default async function ImportDetailPage({
                         {row.status}
                       </span>
                     </td>
-                    <td className="max-w-md truncate py-2 pr-4 font-mono text-xs text-[var(--muted)]">
+                    <td className="max-w-lg truncate py-2 pr-4 font-mono text-xs text-[var(--muted)]">
                       {(() => {
                         const normalized = row.normalized_data ?? {};
                         const hasData = Object.values(normalized).some(
@@ -135,8 +135,8 @@ export default async function ImportDetailPage({
                         );
                         const obj = hasData ? normalized : (row.raw_data ?? {});
                         const json = JSON.stringify(obj);
-                        return json.length > 120
-                          ? json.slice(0, 120) + "…"
+                        return json.length > 250
+                          ? json.slice(0, 250) + "…"
                           : json;
                       })()}
                     </td>
