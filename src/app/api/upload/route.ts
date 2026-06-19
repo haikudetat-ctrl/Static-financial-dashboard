@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { registerImport } from "@/lib/imports";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { registerImport, IMPORT_SOURCE_TYPES } from "@/lib/imports";
 import { getUserContext } from "@/lib/auth/session";
 import { getPrimaryLocation } from "@/lib/inventory/queries";
 import crypto from "node:crypto";
@@ -67,6 +68,28 @@ export async function POST(request: Request) {
       locationId,
       parserVersion,
     });
+
+    // Automatically trigger Edge Function extraction for invoice types
+    if (!result.duplicate) {
+      const functionName =
+        sourceType === IMPORT_SOURCE_TYPES.PLCB
+          ? "plcb-extract"
+          : "extract-invoice";
+      const admin = createAdminClient();
+      admin.functions
+        .invoke(functionName, {
+          body: {
+            importId: result.importId,
+            filePath,
+            organizationId: context.organizationId,
+            locationId,
+          },
+        })
+        .catch(() => {
+          // Edge function invocation is fire-and-forget;
+          // extraction status updates happen inside the function.
+        });
+    }
 
     return NextResponse.json({
       importId: result.importId,
