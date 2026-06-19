@@ -69,12 +69,15 @@ export async function POST(request: Request) {
       parserVersion,
     });
 
-    // Automatically trigger Edge Function extraction for invoice types
+    // Automatically trigger Edge Function extraction
     if (!result.duplicate) {
       const functionName =
         sourceType === IMPORT_SOURCE_TYPES.PLCB
           ? "plcb-extract"
-          : "extract-invoice";
+          : sourceType === IMPORT_SOURCE_TYPES.TOAST_PMIX ||
+              sourceType === IMPORT_SOURCE_TYPES.TOAST_SALES
+            ? "import-toast"
+            : "extract-invoice";
       const admin = createAdminClient();
       admin.functions
         .invoke(functionName, {
@@ -83,6 +86,7 @@ export async function POST(request: Request) {
             filePath,
             organizationId: context.organizationId,
             locationId,
+            sourceType,
           },
         })
         .catch(() => {
