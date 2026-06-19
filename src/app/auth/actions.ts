@@ -71,7 +71,7 @@ export async function registerAction(
 
   return {
     message:
-      "Account created. Check your email, then ask a manager to assign your workspace.",
+      "Account created. Check your email, then sign in to set up your organization.",
   };
 }
 

@@ -4,6 +4,7 @@ import { AccessPending } from "@/components/layout/access-pending";
 import { ManagerSidebar } from "@/components/layout/manager-sidebar";
 import { MobileManagerNav } from "@/components/layout/mobile-manager-nav";
 import { getUserContext } from "@/lib/auth/session";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export default async function ManagerLayout({
   children,
@@ -11,7 +12,7 @@ export default async function ManagerLayout({
   const context = await getUserContext();
 
   if (!context) {
-    return null;
+    redirect("/auth/login");
   }
 
   if (context.role === "staff") {
@@ -19,6 +20,13 @@ export default async function ManagerLayout({
   }
 
   if (!context.role) {
+    const admin = createAdminClient();
+    const { count } = await admin
+      .from("organizations")
+      .select("*", { count: "exact", head: true });
+    if (count === 0) {
+      redirect("/setup");
+    }
     return <AccessPending email={context.user.email ?? "This account"} />;
   }
 

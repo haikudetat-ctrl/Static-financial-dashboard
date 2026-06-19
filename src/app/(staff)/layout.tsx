@@ -1,10 +1,12 @@
 import { LogOut } from "lucide-react";
+import { redirect } from "next/navigation";
 
 import { signOutAction } from "@/app/auth/actions";
 import { BrandMark } from "@/components/brand-mark";
 import { AccessPending } from "@/components/layout/access-pending";
 import { StaffBottomNav } from "@/components/layout/staff-bottom-nav";
 import { getUserContext } from "@/lib/auth/session";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export default async function StaffLayout({
   children,
@@ -12,10 +14,17 @@ export default async function StaffLayout({
   const context = await getUserContext();
 
   if (!context) {
-    return null;
+    redirect("/auth/login");
   }
 
   if (!context.role) {
+    const admin = createAdminClient();
+    const { count } = await admin
+      .from("organizations")
+      .select("*", { count: "exact", head: true });
+    if (count === 0) {
+      redirect("/setup");
+    }
     return <AccessPending email={context.user.email ?? "This account"} />;
   }
 
