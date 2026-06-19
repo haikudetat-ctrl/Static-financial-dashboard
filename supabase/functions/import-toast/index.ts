@@ -84,7 +84,8 @@ serve(async (req) => {
 });
 
 function parseCsv(text: string): Record<string, string>[] {
-  const lines = text.split("\n").filter((l) => l.trim());
+  const raw = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const lines = raw.split("\n").filter((l) => l.trim());
   if (lines.length < 2) return [];
 
   const headers = parseCsvLine(lines[0]);
