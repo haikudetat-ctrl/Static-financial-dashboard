@@ -11,6 +11,19 @@ export type MatchConfidenceBand = "auto_match" | "suggested_match" | "new_item";
 
 export type InvoiceValidationStatus = "valid" | "warnings" | "blocking";
 
+export type InvoiceProcessingJobStatus =
+  | "queued"
+  | "extracting"
+  | "validating"
+  | "matching"
+  | "needs_review"
+  | "auto_approved"
+  | "approved"
+  | "posted"
+  | "failed"
+  | "cancelled"
+  | "superseded";
+
 export type InvoiceValidationIssue =
   | "invoice_total_mismatch"
   | "invoice_subtotal_mismatch";

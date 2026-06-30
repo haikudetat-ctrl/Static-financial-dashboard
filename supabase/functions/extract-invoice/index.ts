@@ -6,6 +6,8 @@ interface ExtractionRequest {
   filePath: string;
   organizationId: string;
   locationId: string;
+  jobId?: string;
+  maxAttempts?: number;
 }
 
 interface InvoiceLine {
@@ -28,22 +30,33 @@ interface InvoiceMetadata {
 }
 
 serve(async (req) => {
+  let supabase: ReturnType<typeof createClient> | null = null;
+  let jobId: string | undefined;
+  let maxAttempts = 3;
+
   try {
     const {
       importId,
       filePath,
-      organizationId,
-      locationId,
+      jobId: requestJobId,
+      maxAttempts: requestMaxAttempts,
     }: ExtractionRequest = await req.json();
+    jobId = requestJobId;
+    maxAttempts = requestMaxAttempts ?? maxAttempts;
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    supabase = createClient(supabaseUrl, supabaseKey);
 
     await supabase
       .from("source_imports")
       .update({ status: "extracting" })
       .eq("id", importId);
+    await updateJobStatus(supabase, jobId, "extracting", {
+      started_at: new Date().toISOString(),
+      error_code: "",
+      error_message: "",
+    });
 
     const { data: fileData, error: downloadError } = await supabase.storage
       .from("source-documents")
@@ -55,8 +68,11 @@ serve(async (req) => {
 
     const pdfBytes = await fileData.arrayBuffer();
     const text = await extractTextFromPdf(pdfBytes);
+    await updateJobStatus(supabase, jobId, "validating");
+
     const metadata = extractInvoiceMetadata(text);
     const lines = parseInvoiceLines(text);
+    await updateJobStatus(supabase, jobId, "matching");
 
     await supabase
       .from("source_imports")
@@ -93,6 +109,9 @@ serve(async (req) => {
         .update({ status: "staged" })
         .eq("id", importId);
     }
+    await updateJobStatus(supabase, jobId, "needs_review", {
+      completed_at: new Date().toISOString(),
+    });
 
     return new Response(
       JSON.stringify({ success: true, lineCount: lines.length }),
@@ -101,12 +120,86 @@ serve(async (req) => {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Extraction failed";
+    if (supabase && jobId) {
+      await updateJobFailure(supabase, jobId, message, maxAttempts);
+    }
     return new Response(JSON.stringify({ success: false, error: message }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     });
   }
 });
+
+async function updateJobStatus(
+  supabase: ReturnType<typeof createClient>,
+  jobId: string | undefined,
+  status: string,
+  fields: Record<string, string> = {},
+) {
+  if (!jobId) return;
+
+  await supabase
+    .from("invoice_processing_jobs")
+    .update({ status, ...fields })
+    .eq("id", jobId);
+}
+
+async function updateJobFailure(
+  supabase: ReturnType<typeof createClient>,
+  jobId: string,
+  message: string,
+  maxAttempts: number,
+) {
+  const { data } = await supabase
+    .from("invoice_processing_jobs")
+    .select("attempt_count")
+    .eq("id", jobId)
+    .maybeSingle();
+  const attemptCount =
+    typeof data?.attempt_count === "number" ? data.attempt_count : 0;
+  const nextAttemptCount = Math.min(attemptCount + 1, maxAttempts);
+  const shouldRetry = attemptCount < maxAttempts;
+
+  await supabase
+    .from("invoice_processing_jobs")
+    .update({
+      status: shouldRetry ? "queued" : "failed",
+      attempt_count: nextAttemptCount,
+      failed_at: shouldRetry ? null : new Date().toISOString(),
+      error_code: classifyJobError(message),
+      error_message: message,
+    })
+    .eq("id", jobId);
+}
+
+function classifyJobError(message: string) {
+  const normalizedMessage = message.toLowerCase();
+
+  if (
+    normalizedMessage.includes("json") ||
+    normalizedMessage.includes("schema")
+  ) {
+    return "schema_validation";
+  }
+  if (
+    normalizedMessage.includes("timeout") ||
+    normalizedMessage.includes("rate limit") ||
+    normalizedMessage.includes("provider")
+  ) {
+    return "transient_provider";
+  }
+  if (
+    normalizedMessage.includes("download") ||
+    normalizedMessage.includes("storage")
+  ) {
+    return "storage";
+  }
+  if (normalizedMessage.includes("auth")) {
+    return "auth";
+  }
+
+  return "unknown";
+}
 
 async function extractTextFromPdf(buffer: ArrayBuffer): Promise<string> {
   const decoder = new TextDecoder("utf-8");
