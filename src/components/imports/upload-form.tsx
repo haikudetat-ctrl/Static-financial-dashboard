@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
+import { readUploadResponse } from "@/components/imports/upload-response";
 
 type UploadState = "idle" | "uploading" | "done" | "duplicate" | "error";
 
@@ -44,7 +45,7 @@ export function UploadForm({
           body: formData,
         });
 
-        const result = await response.json();
+        const result = await readUploadResponse(response);
 
         if (!response.ok) {
           setState("error");
@@ -52,7 +53,7 @@ export function UploadForm({
           return;
         }
 
-        setImportId(result.importId);
+        setImportId(result.importId ?? null);
 
         if (result.duplicate) {
           setState("duplicate");
@@ -62,10 +63,20 @@ export function UploadForm({
           setMessage(`${file.name} uploaded and staged.`);
         }
 
-        onComplete?.(result);
-      } catch {
+        if (result.importId && typeof result.duplicate === "boolean") {
+          onComplete?.({
+            importId: result.importId,
+            duplicate: result.duplicate,
+            fileName: result.fileName ?? file.name,
+          });
+        }
+      } catch (error) {
         setState("error");
-        setMessage("Upload failed. Check your connection.");
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Upload failed. Check your connection.",
+        );
       }
     },
     [sourceType, onComplete],

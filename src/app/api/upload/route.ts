@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { registerImport, IMPORT_SOURCE_TYPES } from "@/lib/imports";
+import {
+  registerImport,
+  stageImportRows,
+  IMPORT_SOURCE_TYPES,
+} from "@/lib/imports";
 import { getUserContext } from "@/lib/auth/session";
 import { getPrimaryLocation } from "@/lib/inventory/queries";
+import { extractOrderMetadata, parsePlcbLineItems } from "@/lib/plcb";
+import { extractPdfText } from "@/lib/plcb/pdf";
 import crypto from "node:crypto";
 
 export async function POST(request: Request) {
@@ -87,8 +93,53 @@ export async function POST(request: Request) {
       }
     }
 
-    // Automatically trigger Edge Function extraction
-    if (!result.duplicate) {
+    if (!result.duplicate && sourceType === IMPORT_SOURCE_TYPES.PLCB) {
+      const text = await extractPdfText(buffer);
+      const metadata = extractOrderMetadata(text);
+      const lines = parsePlcbLineItems(
+        text,
+        metadata.orderId ?? "unknown",
+        metadata.date ?? "",
+        metadata.type ?? "Pickup",
+        metadata.status ?? "Posted",
+      );
+
+      if (lines.length === 0) {
+        await supabase
+          .from("source_imports")
+          .update({
+            status: "failed",
+            error_message:
+              "No PLCB line items were found in this PDF. Confirm it is a Licensee Online Order Portal PDF.",
+          })
+          .eq("id", result.importId);
+      } else {
+        await stageImportRows(
+          result.importId,
+          lines.map((line, index) => ({
+            rowIndex: index,
+            rawData: {
+              ...line,
+              order_total: metadata.totalAmount ?? 0,
+              total_bottles: metadata.totalBottles ?? 0,
+            },
+            normalizedData: {
+              order_id: line.order_id,
+              date: line.date,
+              type: line.type,
+              status: line.status,
+              item_code: line.item_code,
+              product_name: line.product,
+              bottle_size: line.bottle_size,
+              quantity_ordered: line.ordered_quantity,
+              quantity_shipped: line.shipped_quantity,
+              unit_price: line.unit_price,
+              line_total: line.total,
+            },
+          })),
+        );
+      }
+    } else if (!result.duplicate) {
       const functionName =
         sourceType === IMPORT_SOURCE_TYPES.PLCB
           ? "plcb-extract"

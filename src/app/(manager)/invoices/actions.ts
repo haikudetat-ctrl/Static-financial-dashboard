@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getUserContext } from "@/lib/auth/session";
+import { parseReviewApprovalInput } from "@/lib/invoices/queries";
 import { getPrimaryLocation } from "@/lib/inventory/queries";
 import { detectInvoiceAnomalies } from "@/lib/purchasing/calculations";
 import { createClient } from "@/lib/supabase/server";
@@ -178,4 +179,215 @@ export async function approveInvoiceAction(invoiceId: string) {
   revalidatePath("/invoices/upload");
   revalidatePath(`/invoices/${invoiceId}/review`);
   revalidatePath("/inventory/on-hand");
+}
+
+export async function approveInvoiceReviewAction(
+  reviewId: string,
+  input: unknown,
+) {
+  const { context, locationId } = await requireManager();
+  const parsedInput = parseReviewApprovalInput(input);
+  const supabase = await createClient();
+
+  const { data: reviewCard, error: reviewError } = await supabase
+    .from("review_queue")
+    .select("id, entity_type, entity_id, prefill_payload")
+    .eq("id", reviewId)
+    .eq("organization_id", context.organizationId)
+    .single();
+  if (reviewError || !reviewCard) {
+    throw new Error(reviewError?.message ?? "Review card not found.");
+  }
+
+  if (
+    reviewCard.entity_type === "invoice_line_candidate" &&
+    parsedInput.selectedMatchId
+  ) {
+    const { error: candidateError } = await supabase
+      .from("invoice_line_candidates")
+      .update({
+        current_best_match_id: parsedInput.selectedMatchId,
+        validation_status: "valid",
+      })
+      .eq("id", reviewCard.entity_id)
+      .eq("organization_id", context.organizationId);
+    if (candidateError) throw new Error(candidateError.message);
+  }
+
+  const { error: actionError } = await supabase.from("review_actions").insert({
+    organization_id: context.organizationId,
+    location_id: locationId,
+    review_queue_id: reviewId,
+    actor_type: "human",
+    actor_id: context.user.id,
+    action: "approved",
+    before_payload: reviewCard.prefill_payload ?? {},
+    after_payload: {
+      selected_match_id: parsedInput.selectedMatchId ?? null,
+      idempotency_key: parsedInput.idempotencyKey,
+      notes: parsedInput.notes,
+    },
+    notes: parsedInput.notes,
+  });
+  if (actionError) throw new Error(actionError.message);
+
+  const { error: updateError } = await supabase
+    .from("review_queue")
+    .update({
+      status: "resolved",
+      resolved_by: context.user.id,
+      resolved_at: new Date().toISOString(),
+    })
+    .eq("id", reviewId)
+    .eq("organization_id", context.organizationId);
+  if (updateError) throw new Error(updateError.message);
+
+  revalidatePath("/invoices/review");
+}
+
+export async function rejectInvoiceReviewAction(
+  reviewId: string,
+  reason: string,
+) {
+  const { context, locationId } = await requireManager();
+  const supabase = await createClient();
+
+  const { data: reviewCard, error: reviewError } = await supabase
+    .from("review_queue")
+    .select("id, prefill_payload")
+    .eq("id", reviewId)
+    .eq("organization_id", context.organizationId)
+    .single();
+  if (reviewError || !reviewCard) {
+    throw new Error(reviewError?.message ?? "Review card not found.");
+  }
+
+  const { error: actionError } = await supabase.from("review_actions").insert({
+    organization_id: context.organizationId,
+    location_id: locationId,
+    review_queue_id: reviewId,
+    actor_type: "human",
+    actor_id: context.user.id,
+    action: "rejected",
+    before_payload: reviewCard.prefill_payload ?? {},
+    after_payload: { reason },
+    notes: reason,
+  });
+  if (actionError) throw new Error(actionError.message);
+
+  const { error: updateError } = await supabase
+    .from("review_queue")
+    .update({
+      status: "rejected",
+      resolved_by: context.user.id,
+      resolved_at: new Date().toISOString(),
+    })
+    .eq("id", reviewId)
+    .eq("organization_id", context.organizationId);
+  if (updateError) throw new Error(updateError.message);
+
+  revalidatePath("/invoices/review");
+}
+
+export async function createInventoryItemFromInvoiceLineAction(
+  reviewId: string,
+  formData: FormData,
+) {
+  const { context, locationId } = await requireManager();
+  const supabase = await createClient();
+  const itemName = String(formData.get("item_name") ?? "").trim();
+  const baseUnitId = String(formData.get("base_unit_id") ?? "");
+  const vendorId = String(formData.get("vendor_id") ?? "");
+  const vendorProductName = String(
+    formData.get("vendor_product_name") ?? itemName,
+  ).trim();
+
+  if (!itemName || !baseUnitId || !vendorId || !vendorProductName) {
+    throw new Error("Item name, base unit, vendor, and product name required.");
+  }
+
+  const { data: item, error: itemError } = await supabase
+    .from("inventory_items")
+    .insert({
+      organization_id: context.organizationId,
+      name: itemName,
+      description: String(formData.get("description") ?? ""),
+      category_id: String(formData.get("category_id") ?? "") || null,
+      base_unit_id: baseUnitId,
+      purchase_unit_id: String(formData.get("purchase_unit_id") ?? "") || null,
+      count_unit_id: String(formData.get("count_unit_id") ?? "") || null,
+      is_purchased: true,
+    })
+    .select("id")
+    .single();
+  if (itemError || !item) {
+    throw new Error(itemError?.message ?? "Failed to create inventory item.");
+  }
+
+  const { data: vendorItem, error: vendorItemError } = await supabase
+    .from("vendor_items")
+    .insert({
+      organization_id: context.organizationId,
+      vendor_id: vendorId,
+      inventory_item_id: item.id,
+      vendor_product_code: String(formData.get("vendor_product_code") ?? ""),
+      vendor_product_name: vendorProductName,
+      pack_size: String(formData.get("pack_size") ?? ""),
+      purchase_unit_id: String(formData.get("purchase_unit_id") ?? "") || null,
+      normalized_description: vendorProductName.toLowerCase(),
+      case_quantity: Number(formData.get("case_quantity") ?? 0) || null,
+      base_quantity_per_purchase_unit:
+        Number(formData.get("base_quantity_per_purchase_unit") ?? 0) || null,
+    })
+    .select("id")
+    .single();
+  if (vendorItemError || !vendorItem) {
+    throw new Error(
+      vendorItemError?.message ?? "Failed to create vendor item.",
+    );
+  }
+
+  const { data: action, error: actionError } = await supabase
+    .from("review_actions")
+    .insert({
+      organization_id: context.organizationId,
+      location_id: locationId,
+      review_queue_id: reviewId,
+      actor_type: "human",
+      actor_id: context.user.id,
+      action: "created_inventory_item",
+      after_payload: {
+        inventory_item_id: item.id,
+        vendor_item_id: vendorItem.id,
+      },
+    })
+    .select("id")
+    .single();
+  if (actionError || !action) {
+    throw new Error(actionError?.message ?? "Failed to record review action.");
+  }
+
+  await supabase.from("inventory_item_aliases").insert({
+    organization_id: context.organizationId,
+    inventory_item_id: item.id,
+    vendor_id: vendorId,
+    alias: vendorProductName,
+    normalized_alias: vendorProductName.toLowerCase(),
+    source: "invoice_review",
+    confidence: 1,
+    created_from_review_action_id: action.id,
+  });
+
+  const { error: updateError } = await supabase
+    .from("review_queue")
+    .update({
+      status: "resolved",
+      resolved_by: context.user.id,
+      resolved_at: new Date().toISOString(),
+    })
+    .eq("id", reviewId)
+    .eq("organization_id", context.organizationId);
+  if (updateError) throw new Error(updateError.message);
+
+  revalidatePath("/invoices/review");
 }
