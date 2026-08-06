@@ -55,10 +55,10 @@ export default async function MenuProfitabilityPage() {
   const profitable = sales
     .map((sale) => {
       const mapping = mappings?.find(
-        (m) => m.external_item_guid === sale.toast_item_guid,
+        (m) => m.external_item_guid === sale.item_guid,
       );
       const cost = mapping
-        ? (mappedCosts.get(sale.toast_item_guid)?.cost ?? 0)
+        ? (mappedCosts.get(sale.item_guid)?.cost ?? 0)
         : null;
       const netSales = Number(sale.net_sales);
       const qty = Number(sale.quantity_sold);

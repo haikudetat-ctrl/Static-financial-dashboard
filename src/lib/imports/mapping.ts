@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { MappingQueueType } from "@/lib/types";
 
 export type QueueItemInput = {
@@ -43,6 +44,7 @@ export async function confirmMapping(
   profileId: string,
 ): Promise<void> {
   const supabase = await createClient();
+  const admin = createAdminClient();
 
   const { error } = await supabase
     .from("mapping_queue_items")
@@ -56,6 +58,43 @@ export async function confirmMapping(
     .eq("id", queueItemId);
 
   if (error) throw new Error(`Failed to confirm mapping: ${error.message}`);
+
+  const { data: item } = await admin
+    .from("mapping_queue_items")
+    .select("queue_type, organization_id, source_context, source_value")
+    .eq("id", queueItemId)
+    .single();
+
+  if (!item) return;
+
+  if (
+    item.queue_type === "toast_item_to_recipe" &&
+    confirmedMatchType === "recipe"
+  ) {
+    const ctx = item.source_context as Record<string, unknown>;
+    const norm = (ctx?.normalized_data ?? {}) as Record<string, unknown>;
+    const raw = (ctx?.raw_data ?? {}) as Record<string, string>;
+    const externalItemGuid = String(norm.item_guid ?? raw.ItemGuid ?? "");
+    const externalItemName = String(norm.item_name ?? item.source_value ?? "");
+
+    if (externalItemGuid) {
+      await admin.from("recipe_menu_item_mappings").upsert(
+        {
+          organization_id: item.organization_id,
+          recipe_id: confirmedMatchId,
+          source_system: "toast",
+          external_item_guid: externalItemGuid,
+          external_item_name: externalItemName,
+          active: true,
+          created_by: profileId,
+        },
+        {
+          onConflict: "organization_id, source_system, external_item_guid",
+          ignoreDuplicates: false,
+        },
+      );
+    }
+  }
 }
 
 export async function skipMapping(
@@ -113,6 +152,7 @@ export async function bulkConfirmMapping(
   profileId: string,
 ): Promise<{ confirmed: number; failed: number }> {
   const supabase = await createClient();
+  const admin = createAdminClient();
 
   const { error } = await supabase
     .from("mapping_queue_items")
@@ -126,6 +166,45 @@ export async function bulkConfirmMapping(
 
   if (error) {
     return { confirmed: 0, failed: ids.length };
+  }
+
+  const { data: items } = await admin
+    .from("mapping_queue_items")
+    .select(
+      "id, queue_type, organization_id, source_context, source_value, suggested_match_id, suggested_match_label",
+    )
+    .in("id", ids);
+
+  if (items) {
+    for (const item of items) {
+      if (item.queue_type === "toast_item_to_recipe") {
+        const ctx = item.source_context as Record<string, unknown>;
+        const norm = (ctx?.normalized_data ?? {}) as Record<string, unknown>;
+        const raw = (ctx?.raw_data ?? {}) as Record<string, string>;
+        const externalItemGuid = String(norm.item_guid ?? raw.ItemGuid ?? "");
+        const externalItemName = String(
+          norm.item_name ?? item.source_value ?? "",
+        );
+
+        if (externalItemGuid && item.suggested_match_id) {
+          await admin.from("recipe_menu_item_mappings").upsert(
+            {
+              organization_id: item.organization_id,
+              recipe_id: item.suggested_match_id,
+              source_system: "toast",
+              external_item_guid: externalItemGuid,
+              external_item_name: externalItemName,
+              active: true,
+              created_by: profileId,
+            },
+            {
+              onConflict: "organization_id, source_system, external_item_guid",
+              ignoreDuplicates: false,
+            },
+          );
+        }
+      }
+    }
   }
 
   return { confirmed: ids.length, failed: 0 };

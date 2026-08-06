@@ -89,7 +89,7 @@ serve(async (req) => {
         }
         return {
           organization_id: organizationId,
-          queue_type: "toast_item_to_inventory",
+          queue_type: "toast_item_to_recipe",
           status: "pending",
           source_value: sourceValue,
           source_context: {

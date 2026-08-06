@@ -76,11 +76,11 @@ export async function checkCloseReadiness(
   // 4. Every sold item has active recipe mapping
   const { data: unmappedItems } = await supabase
     .from("sales_items")
-    .select("toast_item_guid")
+    .select("item_guid")
     .eq("organization_id", organizationId)
     .eq("location_id", locationId)
     .not(
-      "toast_item_guid",
+      "item_guid",
       "in",
       (
         await supabase

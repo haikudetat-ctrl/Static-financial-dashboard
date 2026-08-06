@@ -84,7 +84,7 @@ export async function getMenuProfitability(
   const supabase = await createClient();
   const { data: sales } = await supabase
     .from("sales_items")
-    .select("toast_item_guid, item_name, quantity_sold, net_sales")
+    .select("item_guid, item_name, quantity_sold, net_sales")
     .eq("organization_id", organizationId)
     .eq("location_id", locationId);
   const { data: mappings } = await supabase
