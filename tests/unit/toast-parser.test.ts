@@ -53,6 +53,17 @@ describe("Toast parser", () => {
       expect(result!.quantity_sold).toBe(3);
     });
 
+    it("keys GUID-less All Levels rows by normalized item name", () => {
+      const headers = ["name", "date", "qty", "total"];
+      const values = ["  House Vodka ", "2026-10-06", "5", "77.00"];
+
+      const result = parsePmixCsvRow(headers, values);
+
+      expect(result).not.toBeNull();
+      expect(result!.item_guid).toBe("name:house vodka");
+      expect(result!.item_name).toBe("House Vodka");
+    });
+
     it("returns null for rows missing required fields", () => {
       const result = parsePmixCsvRow(["name"], ["test"]);
       expect(result).toBeNull();
