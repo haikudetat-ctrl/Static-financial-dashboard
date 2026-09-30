@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
+  async redirects() {
+    // Short, shareable sign-in URL (clopen.2stack.com/login).
+    return [{ source: "/login", destination: "/auth/login", permanent: false }];
+  },
 };
 
 export default nextConfig;
