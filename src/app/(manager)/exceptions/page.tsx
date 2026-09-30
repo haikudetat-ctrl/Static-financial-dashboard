@@ -73,6 +73,15 @@ export default async function ExceptionsPage() {
         .is("inventory_item_id", null)
     : { count: 0 };
 
+  // Catalog questions left open by the workbook import
+  const { count: catalogReview } = context?.organizationId
+    ? await supabase
+        .from("catalog_review_items")
+        .select("*", { count: "exact", head: true })
+        .eq("organization_id", context.organizationId)
+        .eq("status", "open")
+    : { count: 0 };
+
   const sections = [
     {
       label: "Negative inventory",
@@ -102,6 +111,14 @@ export default async function ExceptionsPage() {
       count: unmappedLines ?? 0,
       detail:
         "Every invoice line must map to an inventory item for accurate costing.",
+      severity: "incomplete" as const,
+    },
+    {
+      label: "Catalog review",
+      href: "/exceptions/catalog-review",
+      count: catalogReview ?? 0,
+      detail:
+        "Products with no cost, missing recipes, unmatched shelf items, and import assumptions to confirm.",
       severity: "incomplete" as const,
     },
     {

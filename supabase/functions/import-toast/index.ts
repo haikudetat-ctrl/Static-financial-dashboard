@@ -1,3 +1,4 @@
+import { requireServiceCredential } from "../_shared/service-auth.ts";
 // Toast PMIX/Sales/Labor CSV Import Edge Function
 // Parses uploaded Toast CSV/ZIP files and stages the rows.
 
@@ -13,6 +14,11 @@ interface ImportRequest {
 }
 
 serve(async (req) => {
+  const denied = requireServiceCredential(
+    req,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+  );
+  if (denied) return denied;
   try {
     const {
       importId,
@@ -213,28 +219,41 @@ function parseFloatSafe(v: string): number {
   return isNaN(n) ? 0 : n;
 }
 
+// Toast "All Levels" exports carry item names but no GUIDs; key those rows by
+// normalized name so recipe mappings still match. Mirrors toastItemKey in
+// src/lib/toast.
+function toastItemKey(itemGuid: string, itemName: string): string {
+  if (itemGuid) return itemGuid;
+  const name = itemName.trim().toLowerCase();
+  return name ? `name:${name}` : "";
+}
+
 function normalizeToastRow(
   row: Record<string, string>,
   sourceType: string,
 ): Record<string, unknown> {
   if (sourceType === "toast_pmix") {
+    const itemName = matchCol(
+      row,
+      "ItemName",
+      "Item Name",
+      "MenuItemName",
+      "Menu Item Name",
+      "Item",
+      "item_name",
+    );
     return {
-      item_guid: matchCol(
-        row,
-        "ItemGuid",
-        "Item GUID",
-        "MenuItemGUID",
-        "Menu Item GUID",
+      item_guid: toastItemKey(
+        matchCol(
+          row,
+          "ItemGuid",
+          "Item GUID",
+          "MenuItemGUID",
+          "Menu Item GUID",
+        ),
+        itemName,
       ),
-      item_name: matchCol(
-        row,
-        "ItemName",
-        "Item Name",
-        "MenuItemName",
-        "Menu Item Name",
-        "Item",
-        "item_name",
-      ),
+      item_name: itemName,
       business_date: matchCol(
         row,
         "BusinessDate",

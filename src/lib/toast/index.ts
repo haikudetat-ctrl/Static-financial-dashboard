@@ -16,6 +16,17 @@ export type SalesSummaryPackage = {
   totalNetSales: number;
 };
 
+/**
+ * Toast "All Levels" exports carry item names but no item GUIDs. Rows without
+ * a GUID are keyed by their normalized name so nightly uploads still match
+ * recipe mappings. Keep in sync with supabase/functions/import-toast.
+ */
+export function toastItemKey(itemGuid: string, itemName: string): string {
+  if (itemGuid) return itemGuid;
+  const name = itemName.trim().toLowerCase();
+  return name ? `name:${name}` : "";
+}
+
 export function parsePmixCsvRow(
   headers: string[],
   values: string[],
@@ -27,10 +38,12 @@ export function parsePmixCsvRow(
     return idx >= 0 ? (values[idx] ?? "").trim() : "";
   };
 
-  const itemGuid =
-    get("ItemGuid") || get("Item GUID") || get("guid") || get("id");
   const itemName =
     get("ItemName") || get("Item Name") || get("name") || get("product");
+  const itemGuid = toastItemKey(
+    get("ItemGuid") || get("Item GUID") || get("guid") || get("id"),
+    itemName,
+  );
   const businessDate =
     get("BusinessDate") || get("Business Date") || get("Date") || get("date");
   const qtySold = parseFloat(
