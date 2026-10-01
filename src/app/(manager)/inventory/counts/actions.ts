@@ -4,23 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getUserContext } from "@/lib/auth/session";
+import { findCountPeriod } from "@/lib/inventory/count-period";
 import { filterCountItems } from "@/lib/inventory/counts";
 import { getPrimaryLocation } from "@/lib/inventory/queries";
 import { createClient } from "@/lib/supabase/server";
-
-function monthBounds(date = new Date()) {
-  const start = new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1),
-  );
-  const end = new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0),
-  );
-  return {
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
-    today: date.toISOString().slice(0, 10),
-  };
-}
 
 async function requireManager() {
   const context = await getUserContext();
@@ -32,11 +19,11 @@ async function requireManager() {
     context.locationId,
   );
   if (!locationId) throw new Error("No location is configured.");
-  return { context, locationId };
+  return { context, organizationId: context.organizationId, locationId };
 }
 
 export async function createInventoryCountAction(formData: FormData) {
-  const { context, locationId } = await requireManager();
+  const { context, organizationId, locationId } = await requireManager();
   const supabase = await createClient();
   const countType = formData.get("count_type") === "spot" ? "spot" : "full";
   const storageLocationIds = formData
@@ -56,53 +43,17 @@ export async function createInventoryCountAction(formData: FormData) {
     throw new Error("Select at least one storage zone.");
   }
 
-  const { start, end, today } = monthBounds();
-  let { data: period } = await supabase
-    .from("inventory_periods")
-    .select("id")
-    .eq("organization_id", context.organizationId)
-    .eq("location_id", locationId)
-    .lte("period_start", today)
-    .gte("period_end", today)
-    .limit(1)
-    .maybeSingle();
-
+  const period = await findCountPeriod(organizationId, locationId);
   if (!period) {
-    const result = await supabase
-      .from("inventory_periods")
-      .insert({
-        organization_id: context.organizationId,
-        location_id: locationId,
-        period_start: start,
-        period_end: end,
-        status: "count_in_progress",
-        opened_by: context.user.id,
-      })
-      .select("id")
-      .single();
-    if (result.error) throw new Error(result.error.message);
-    period = result.data;
+    throw new Error(
+      "No open period covers today. Create the period before starting a count.",
+    );
   }
 
   const requestedAssignee = String(formData.get("assigned_profile_id") ?? "");
   let assignedProfileId = requestedAssignee;
 
-  if (!assignedProfileId) {
-    const { data: membership } = await supabase
-      .from("location_memberships")
-      .select("organization_memberships(profile_id), roles(slug)")
-      .eq("location_id", locationId)
-      .limit(1)
-      .maybeSingle();
-    const related = membership?.organization_memberships as
-      | { profile_id: string }
-      | { profile_id: string }[]
-      | null
-      | undefined;
-    assignedProfileId = Array.isArray(related)
-      ? (related[0]?.profile_id ?? "")
-      : (related?.profile_id ?? "");
-  }
+  if (!assignedProfileId) assignedProfileId = context.user.id;
 
   if (!assignedProfileId)
     throw new Error("Assign the count to a staff member.");
@@ -259,13 +210,15 @@ export async function createInventoryCountAction(formData: FormData) {
     }
   }
 
-  await supabase
-    .from("inventory_periods")
-    .update({ status: "count_in_progress" })
-    .eq("id", period.id);
+  if (period.status === "draft" || period.status === "reopened") {
+    await supabase
+      .from("inventory_periods")
+      .update({ status: "count_in_progress" })
+      .eq("id", period.id);
+  }
 
   revalidatePath("/inventory");
-  redirect(`/inventory/counts/${count.id}/review`);
+  redirect(`/inventory/counts/${count.id}`);
 }
 
 export async function requestRecountAction(countLineId: string) {
@@ -299,6 +252,7 @@ export async function requestRecountAction(countLineId: string) {
     .eq("id", assignment.inventory_count_id);
 
   revalidatePath(`/inventory/counts/${assignment.inventory_count_id}/review`);
+  revalidatePath(`/inventory/counts/${assignment.inventory_count_id}`);
 }
 
 export async function approveInventoryCountAction(countId: string) {
@@ -325,4 +279,174 @@ export async function approveInventoryCountLineAction(
   });
   if (error) throw new Error(error.message);
   revalidatePath(`/inventory/counts/${countId}/review`);
+}
+
+export type SaveLineResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Saves one line from the count sheet. A blank quantity clears the line
+ * back to pending. Editing a finished area reopens it.
+ */
+export async function saveCountEntryAction(
+  countId: string,
+  lineId: string,
+  quantity: number | null,
+  tenths: number,
+): Promise<SaveLineResult> {
+  const { context } = await requireManager();
+  if (quantity !== null && (!Number.isFinite(quantity) || quantity < 0)) {
+    return { ok: false, error: "Quantity must be zero or more." };
+  }
+  const safeTenths = Math.round(Number(tenths) * 10) / 10;
+  if (!(safeTenths >= 0 && safeTenths <= 0.9)) {
+    return { ok: false, error: "Partial bottle must be 0 to 0.9." };
+  }
+
+  const supabase = await createClient();
+  const { data: line } = await supabase
+    .from("inventory_count_lines")
+    .select(
+      "id, status, inventory_count_assignment_id, inventory_count_assignments!inner(inventory_count_id, status)",
+    )
+    .eq("id", lineId)
+    .eq("inventory_count_assignments.inventory_count_id", countId)
+    .maybeSingle();
+  if (!line) return { ok: false, error: "Line not found on this count." };
+
+  const { data: count } = await supabase
+    .from("inventory_counts")
+    .select("status")
+    .eq("id", countId)
+    .single();
+  if (!count || !["draft", "in_progress", "counted"].includes(count.status)) {
+    return { ok: false, error: `This count is ${count?.status ?? "closed"}.` };
+  }
+
+  if (quantity !== null && line.status === "recount_requested") {
+    await supabase.from("inventory_count_recounts").insert({
+      count_line_id: lineId,
+      profile_id: context.user.id,
+      counted_quantity: quantity,
+      counted_tenths: safeTenths,
+      reason: "Recount entered on count sheet",
+    });
+  }
+
+  const { error } = await supabase
+    .from("inventory_count_lines")
+    .update(
+      quantity === null
+        ? {
+            counted_quantity: null,
+            counted_tenths: 0,
+            is_open_container: false,
+            status: "pending",
+          }
+        : {
+            counted_quantity: quantity,
+            counted_tenths: safeTenths,
+            is_open_container: safeTenths > 0,
+            status: "counted",
+          },
+    )
+    .eq("id", lineId);
+  if (error) return { ok: false, error: error.message };
+
+  const assignment = Array.isArray(line.inventory_count_assignments)
+    ? line.inventory_count_assignments[0]
+    : line.inventory_count_assignments;
+  if (assignment?.status !== "in_progress") {
+    await supabase
+      .from("inventory_count_assignments")
+      .update({ status: "in_progress" })
+      .eq("id", line.inventory_count_assignment_id);
+  }
+  if (count.status !== "in_progress") {
+    await supabase
+      .from("inventory_counts")
+      .update({ status: "in_progress" })
+      .eq("id", countId);
+  }
+  return { ok: true };
+}
+
+/**
+ * Marks a storage area counted. With fillBlanks, items left blank are
+ * recorded as zero on hand (the usual convention for a full count).
+ */
+export async function finishCountAreaAction(
+  countId: string,
+  assignmentId: string,
+  fillBlanks: boolean,
+): Promise<
+  { ok: true; countComplete: boolean } | { ok: false; error: string }
+> {
+  await requireManager();
+  const supabase = await createClient();
+  const { data: assignment } = await supabase
+    .from("inventory_count_assignments")
+    .select("id")
+    .eq("id", assignmentId)
+    .eq("inventory_count_id", countId)
+    .maybeSingle();
+  if (!assignment) return { ok: false, error: "Area not found on this count." };
+
+  if (fillBlanks) {
+    const { error } = await supabase
+      .from("inventory_count_lines")
+      .update({
+        counted_quantity: 0,
+        counted_tenths: 0,
+        is_open_container: false,
+        status: "counted",
+      })
+      .eq("inventory_count_assignment_id", assignmentId)
+      .neq("status", "counted");
+    if (error) return { ok: false, error: error.message };
+  }
+
+  const { count: remaining } = await supabase
+    .from("inventory_count_lines")
+    .select("id", { count: "exact", head: true })
+    .eq("inventory_count_assignment_id", assignmentId)
+    .neq("status", "counted");
+  if ((remaining ?? 0) > 0) {
+    return { ok: false, error: `${remaining} item(s) still need a count.` };
+  }
+
+  await supabase
+    .from("inventory_count_assignments")
+    .update({ status: "counted" })
+    .eq("id", assignmentId);
+
+  const { count: openAreas } = await supabase
+    .from("inventory_count_assignments")
+    .select("id", { count: "exact", head: true })
+    .eq("inventory_count_id", countId)
+    .neq("status", "counted");
+  const countComplete = (openAreas ?? 0) === 0;
+  if (countComplete) {
+    await supabase
+      .from("inventory_counts")
+      .update({ status: "counted" })
+      .eq("id", countId);
+  }
+  revalidatePath("/inventory");
+  revalidatePath("/inventory/counts");
+  return { ok: true, countComplete };
+}
+
+/** Cancels a count that has not been approved. Nothing posts to inventory. */
+export async function cancelCountAction(countId: string) {
+  await requireManager();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("inventory_counts")
+    .update({ status: "cancelled" })
+    .eq("id", countId)
+    .in("status", ["draft", "in_progress", "counted"]);
+  if (error) throw new Error(error.message);
+  revalidatePath("/inventory");
+  revalidatePath("/inventory/counts");
+  redirect("/inventory/counts");
 }

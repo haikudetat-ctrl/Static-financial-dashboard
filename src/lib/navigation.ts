@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   BarChart3,
   Boxes,
+  CalendarDays,
   ClipboardCheck,
   CookingPot,
   FileInput,
@@ -36,6 +37,13 @@ export const managerNavigation: NavigationItem[] = [
     href: "/financial-health",
     icon: BarChart3,
     description: "Profit and loss, cost of goods, and menu profitability.",
+    group: "Overview",
+  },
+  {
+    label: "Periods",
+    href: "/periods",
+    icon: CalendarDays,
+    description: "The 12-period fiscal calendar and period close.",
     group: "Overview",
   },
   {

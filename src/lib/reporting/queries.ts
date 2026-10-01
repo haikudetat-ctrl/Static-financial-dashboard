@@ -13,7 +13,7 @@ export async function getPeriods(
   const supabase = await createClient();
   const { data } = await supabase
     .from("inventory_periods")
-    .select("id, period_start, period_end, status")
+    .select("id, period_start, period_end, status, fiscal_year, period_number")
     .eq("organization_id", organizationId)
     .eq("location_id", locationId)
     .order("period_start", { ascending: false });
@@ -22,6 +22,8 @@ export async function getPeriods(
     periodStart: row.period_start,
     periodEnd: row.period_end,
     status: row.status,
+    fiscalYear: row.fiscal_year,
+    periodNumber: row.period_number,
   }));
 }
 

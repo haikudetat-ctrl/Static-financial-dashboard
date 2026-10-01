@@ -2,106 +2,119 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import {
-  approveInventoryCountLineAction,
   approveInventoryCountAction,
   requestRecountAction,
 } from "@/app/(manager)/inventory/counts/actions";
 import {
-  calculateVariance,
-  countedTotal,
-  formatInventoryQuantity,
-  isMaterialVariance,
-} from "@/lib/inventory/counts";
-import { createClient } from "@/lib/supabase/server";
-import { PageBody, PageHeader } from "@/components/ui";
+  Badge,
+  ButtonLink,
+  Callout,
+  EmptyState,
+  PageBody,
+  PageHeader,
+  Panel,
+  SectionTabs,
+  StatGrid,
+  StatTile,
+  TableScroll,
+  buttonClass,
+  formatMoney,
+  tableClass,
+  tdClass,
+  tdNumClass,
+  thClass,
+  thNumClass,
+} from "@/components/ui";
+import { getCountReview, getCountSheet } from "@/lib/inventory/count-sheet";
+import { formatInventoryQuantity } from "@/lib/inventory/counts";
+
+import { COUNT_STATUS_LABEL, COUNT_STATUS_TONE } from "../../status";
 
 export const metadata: Metadata = { title: "Count review" };
 
+/** A line is worth a look at ±1 count unit or ±$10. */
+const MATERIAL_QUANTITY = 1;
+const MATERIAL_VALUE = 10;
+
 export default async function CountReviewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ show?: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createClient();
-  const { data: count } = await supabase
-    .from("inventory_counts")
-    .select(
-      "id, inventory_period_id, count_type, status, created_at, approved_at",
-    )
-    .eq("id", id)
-    .maybeSingle();
-  if (!count) notFound();
+  const { show } = await searchParams;
+  const sheet = await getCountSheet(id);
+  if (!sheet) notFound();
+  const review = await getCountReview(id, sheet.period?.id ?? null);
 
-  const { data: assignments } = await supabase
-    .from("inventory_count_assignments")
-    .select("id, storage_location_id, status")
-    .eq("inventory_count_id", id);
-  const assignmentIds = (assignments ?? []).map((assignment) => assignment.id);
-  const { data: lines } = assignmentIds.length
-    ? await supabase
-        .from("inventory_count_lines")
-        .select(
-          "id, inventory_count_assignment_id, inventory_item_id, storage_location_id, counted_quantity, counted_tenths, is_open_container, expected_quantity, notes, status, approved_by, approved_at",
-        )
-        .in("inventory_count_assignment_id", assignmentIds)
-    : { data: [] };
-  const itemIds = (lines ?? []).map((line) => line.inventory_item_id);
-  const storageIds = (assignments ?? []).map(
-    (assignment) => assignment.storage_location_id,
+  const rows = sheet.areas.flatMap((area) =>
+    area.lines.map((line) => {
+      const detail = review.get(line.id);
+      const expected = detail?.expectedQuantity ?? 0;
+      const counted = detail?.countedTotal ?? null;
+      const factor = detail?.conversionFactor ?? 1;
+      const unitCost = detail?.unitCost ?? 0;
+      const quantityVariance = counted === null ? null : counted - expected;
+      const valueVariance =
+        quantityVariance === null ? null : quantityVariance * factor * unitCost;
+      return {
+        line,
+        area,
+        expected,
+        counted,
+        quantityVariance,
+        valueVariance,
+        countedValue: (counted ?? 0) * factor * unitCost,
+        expectedValue: expected * factor * unitCost,
+        material:
+          quantityVariance !== null &&
+          (Math.abs(quantityVariance) >= MATERIAL_QUANTITY ||
+            Math.abs(valueVariance ?? 0) >= MATERIAL_VALUE),
+        approved: detail?.approved ?? false,
+      };
+    }),
   );
-  const [{ data: items }, { data: locations }] = await Promise.all([
-    itemIds.length
-      ? supabase
-          .from("inventory_items")
-          .select("id, name, count_unit_id, base_unit_id")
-          .in("id", itemIds)
-      : Promise.resolve({ data: [] }),
-    storageIds.length
-      ? supabase
-          .from("storage_locations")
-          .select("id, name, walk_order")
-          .in("id", storageIds)
-      : Promise.resolve({ data: [] }),
-  ]);
-  const unitIds = (items ?? [])
-    .flatMap((item) => [item.count_unit_id, item.base_unit_id])
-    .filter((unitId): unitId is string => Boolean(unitId));
-  const [{ data: units }, { data: costSnapshots }] = await Promise.all([
-    unitIds.length
-      ? supabase
-          .from("units")
-          .select("id, abbreviation, conversion_factor_to_base")
-          .in("id", unitIds)
-      : Promise.resolve({ data: [] }),
-    itemIds.length
-      ? supabase
-          .from("inventory_item_cost_snapshots")
-          .select("inventory_item_id, weighted_average_cost, effective_at")
-          .eq("inventory_period_id", count.inventory_period_id)
-          .in("inventory_item_id", itemIds)
-          .order("effective_at", { ascending: false })
-      : Promise.resolve({ data: [] }),
-  ]);
 
-  const approveAction = approveInventoryCountAction.bind(null, id);
+  const uncounted = rows.filter((row) => row.counted === null).length;
+  const materialRows = rows.filter((row) => row.material);
+  const countedValue = rows.reduce((sum, row) => sum + row.countedValue, 0);
+  const expectedValue = rows.reduce((sum, row) => sum + row.expectedValue, 0);
+  const netVariance = countedValue - expectedValue;
+  const showAll = show === "all";
+  const visible = showAll ? rows : materialRows;
+  const canApprove = sheet.status === "counted";
+  const editable = ["draft", "in_progress", "counted"].includes(sheet.status);
+  const title = `Review ${sheet.countType === "full" ? "full" : "spot"} count`;
 
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Inventory", href: "/inventory" }]}
-        title={`Review ${count.count_type} count`}
+        breadcrumbs={[
+          { label: "Inventory", href: "/inventory" },
+          { label: "Counts", href: "/inventory/counts" },
+          { label: "Count sheet", href: `/inventory/counts/${id}` },
+        ]}
+        title={title}
         description={
-          <>
-            Expected quantities are visible here only. Material variance is
-            highlighted at ±1 unit or ±$10.
-          </>
+          <span className="inline-flex flex-wrap items-center gap-2">
+            {sheet.periodLabel}
+            <Badge tone={COUNT_STATUS_TONE[sheet.status] ?? "neutral"}>
+              {COUNT_STATUS_LABEL[sheet.status] ?? sheet.status}
+            </Badge>
+          </span>
         }
         actions={
           <>
-            {count.status === "counted" && (
-              <form action={approveAction}>
-                <button className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--foreground)] bg-[var(--foreground)] px-3.5 text-sm font-medium text-white transition hover:bg-[#343a32] disabled:cursor-not-allowed disabled:opacity-50">
+            {editable && (
+              <ButtonLink href={`/inventory/counts/${id}`}>
+                Back to count sheet
+              </ButtonLink>
+            )}
+            {canApprove && (
+              <form action={approveInventoryCountAction.bind(null, id)}>
+                <button type="submit" className={buttonClass("primary")}>
                   Approve and post
                 </button>
               </form>
@@ -109,173 +122,168 @@ export default async function CountReviewPage({
           </>
         }
       />
+      <SectionTabs
+        items={[
+          {
+            label: `Variances (${materialRows.length})`,
+            href: `/inventory/counts/${id}/review`,
+            active: !showAll,
+          },
+          {
+            label: `All items (${rows.length})`,
+            href: `/inventory/counts/${id}/review?show=all`,
+            active: showAll,
+          },
+        ]}
+      />
       <PageBody>
-        <div className="mt-7 grid gap-6">
-          {[...(assignments ?? [])]
-            .sort((left, right) => {
-              const leftOrder =
-                locations?.find(
-                  (location) => location.id === left.storage_location_id,
-                )?.walk_order ?? 0;
-              const rightOrder =
-                locations?.find(
-                  (location) => location.id === right.storage_location_id,
-                )?.walk_order ?? 0;
-              return leftOrder - rightOrder;
-            })
-            .map((assignment) => {
-              const location = locations?.find(
-                (candidate) => candidate.id === assignment.storage_location_id,
-              );
-              return (
-                <section key={assignment.id} className="border">
-                  <header className="flex items-center justify-between bg-[var(--surface)] p-4">
-                    <h2 className="text-lg font-semibold">
-                      {location?.name ?? "Storage zone"}
-                    </h2>
-                    <span className="font-mono text-[10px] tracking-[0.12em] uppercase">
-                      {assignment.status}
-                    </span>
-                  </header>
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[760px] border-collapse text-sm">
-                      <thead>
-                        <tr className="border-y bg-white text-left font-mono text-[10px] tracking-[0.1em] text-[var(--muted)] uppercase">
-                          <th className="px-4 py-2.5">Item</th>
-                          <th className="px-4 py-2.5 text-right">Expected</th>
-                          <th className="px-4 py-2.5 text-right">Counted</th>
-                          <th className="px-4 py-2.5 text-right">
-                            Qty variance
-                          </th>
-                          <th className="px-4 py-2.5 text-right">WAC</th>
-                          <th className="px-4 py-2.5 text-right">$ variance</th>
-                          <th className="px-4 py-2.5">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(lines ?? [])
-                          .filter(
-                            (line) =>
-                              line.inventory_count_assignment_id ===
-                              assignment.id,
-                          )
-                          .map((line) => {
-                            const item = items?.find(
-                              (candidate) =>
-                                candidate.id === line.inventory_item_id,
-                            );
-                            const counted =
-                              line.counted_quantity === null
-                                ? 0
-                                : countedTotal({
-                                    countedQuantity: Number(
-                                      line.counted_quantity,
-                                    ),
-                                    countedTenths: Number(line.counted_tenths),
-                                    isOpenContainer: line.is_open_container,
-                                  });
-                            const countUnit = units?.find(
-                              (unit) => unit.id === item?.count_unit_id,
-                            );
-                            const unitCost = Number(
-                              costSnapshots?.find(
-                                (snapshot) =>
-                                  snapshot.inventory_item_id ===
-                                  line.inventory_item_id,
-                              )?.weighted_average_cost ?? 0,
-                            );
-                            const variance = calculateVariance({
-                              expectedQuantity: Number(line.expected_quantity),
-                              countedQuantity: counted,
-                              unitCost,
-                              conversionFactorToBase: Number(
-                                countUnit?.conversion_factor_to_base ?? 1,
-                              ),
-                            });
-                            const material = isMaterialVariance(variance, {
-                              quantity: 1,
-                              value: 10,
-                            });
-                            const recountAction = requestRecountAction.bind(
-                              null,
-                              line.id,
-                            );
-                            const approveLineAction =
-                              approveInventoryCountLineAction.bind(
-                                null,
-                                count.id,
-                                line.id,
-                              );
+        {uncounted > 0 && (
+          <Callout
+            tone="warning"
+            title={`${uncounted} item${uncounted === 1 ? "" : "s"} not counted yet`}
+            action={
+              <ButtonLink href={`/inventory/counts/${id}`} size="sm">
+                Open count sheet
+              </ButtonLink>
+            }
+          >
+            Finish every area on the count sheet before approving. Blank items
+            can be counted as zero when you finish an area.
+          </Callout>
+        )}
+        {sheet.status === "approved" && (
+          <Callout tone="good" title="Approved and posted to inventory" />
+        )}
 
-                            return (
-                              <tr
-                                key={line.id}
-                                className={`border-b ${material ? "bg-[#fff4eb]" : "bg-white"}`}
+        <StatGrid>
+          <StatTile
+            label="Counted value"
+            value={formatMoney(countedValue, { cents: false })}
+            detail={`${rows.length - uncounted} of ${rows.length} items counted`}
+          />
+          <StatTile
+            label="Expected value"
+            value={formatMoney(expectedValue, { cents: false })}
+            detail="Posted on hand when the count started"
+          />
+          <StatTile
+            label="Net variance"
+            value={`${netVariance > 0 ? "+" : ""}${formatMoney(netVariance, { cents: false })}`}
+            detail="Counted minus expected, at current cost"
+            tone={netVariance < -MATERIAL_VALUE ? "danger" : "neutral"}
+          />
+          <StatTile
+            label="Items to look at"
+            value={materialRows.length}
+            detail={`Off by ${MATERIAL_QUANTITY}+ unit or $${MATERIAL_VALUE}+`}
+            tone={materialRows.length > 0 ? "warning" : "good"}
+          />
+        </StatGrid>
+
+        <Panel flush>
+          {visible.length === 0 ? (
+            <EmptyState
+              title={
+                showAll ? "This count has no items" : "No items to look at"
+              }
+              detail={
+                showAll
+                  ? undefined
+                  : `Every counted item is within ${MATERIAL_QUANTITY} unit and $${MATERIAL_VALUE} of expected.`
+              }
+              action={
+                showAll ? undefined : (
+                  <ButtonLink href={`/inventory/counts/${id}/review?show=all`}>
+                    See all items
+                  </ButtonLink>
+                )
+              }
+            />
+          ) : (
+            <TableScroll>
+              <table className={`${tableClass} min-w-[760px]`}>
+                <thead>
+                  <tr>
+                    <th className={thClass}>Item</th>
+                    <th className={thClass}>Area</th>
+                    <th className={thNumClass}>Expected</th>
+                    <th className={thNumClass}>Counted</th>
+                    <th className={thNumClass}>Variance</th>
+                    <th className={thNumClass}>Value</th>
+                    <th className={thClass}>
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((row) => (
+                    <tr
+                      key={row.line.id}
+                      className={row.material ? "bg-[#fdf8ee]" : undefined}
+                    >
+                      <td className={tdClass}>
+                        <span className="font-medium">{row.line.name}</span>
+                        <span className="block text-xs text-[var(--muted)]">
+                          {row.line.unit}
+                          {row.line.status === "recount_requested" &&
+                            " · recount requested"}
+                        </span>
+                      </td>
+                      <td className={`${tdClass} text-[var(--muted)]`}>
+                        {row.area.name}
+                      </td>
+                      <td className={tdNumClass}>
+                        {formatInventoryQuantity(row.expected)}
+                      </td>
+                      <td className={tdNumClass}>
+                        {row.counted === null
+                          ? "—"
+                          : formatInventoryQuantity(row.counted)}
+                      </td>
+                      <td
+                        className={`${tdNumClass} ${
+                          row.material ? "font-semibold" : ""
+                        } ${
+                          (row.quantityVariance ?? 0) < 0
+                            ? "text-[var(--danger)]"
+                            : ""
+                        }`}
+                      >
+                        {row.quantityVariance === null
+                          ? "—"
+                          : `${row.quantityVariance > 0 ? "+" : ""}${formatInventoryQuantity(row.quantityVariance)}`}
+                      </td>
+                      <td className={tdNumClass}>
+                        {row.valueVariance === null
+                          ? "—"
+                          : `${row.valueVariance > 0 ? "+" : ""}${formatMoney(row.valueVariance)}`}
+                      </td>
+                      <td className={`${tdClass} text-right`}>
+                        {editable &&
+                          row.material &&
+                          row.line.status !== "recount_requested" && (
+                            <form
+                              action={requestRecountAction.bind(
+                                null,
+                                row.line.id,
+                              )}
+                            >
+                              <button
+                                type="submit"
+                                className={buttonClass("ghost", "sm")}
                               >
-                                <td className="px-4 py-2.5 font-medium">
-                                  {item?.name ?? "Inventory item"}
-                                </td>
-                                <td className="px-4 py-2.5 text-right tabular-nums">
-                                  {formatInventoryQuantity(
-                                    Number(line.expected_quantity),
-                                  )}
-                                </td>
-                                <td className="px-4 py-2.5 text-right tabular-nums">
-                                  {formatInventoryQuantity(counted)}
-                                </td>
-                                <td className="px-4 py-2.5 text-right tabular-nums">
-                                  {formatInventoryQuantity(
-                                    variance.quantityVariance,
-                                  )}
-                                </td>
-                                <td className="px-4 py-2.5 text-right tabular-nums">
-                                  {unitCost.toLocaleString("en-US", {
-                                    style: "currency",
-                                    currency: "USD",
-                                  })}
-                                  <span className="block text-[10px] text-[var(--muted)]">
-                                    per base unit
-                                  </span>
-                                </td>
-                                <td className="px-4 py-2.5 text-right tabular-nums">
-                                  {variance.valueVariance.toLocaleString(
-                                    "en-US",
-                                    {
-                                      style: "currency",
-                                      currency: "USD",
-                                    },
-                                  )}
-                                </td>
-                                <td className="px-4 py-2.5">
-                                  <div className="flex gap-2">
-                                    {line.approved_at ? (
-                                      <span className="bg-[#e8f0eb] px-3 py-2 text-xs font-semibold text-[var(--success)]">
-                                        Approved
-                                      </span>
-                                    ) : (
-                                      <form action={approveLineAction}>
-                                        <button className="border px-3 py-2 text-xs font-semibold">
-                                          Approve line
-                                        </button>
-                                      </form>
-                                    )}
-                                    <form action={recountAction}>
-                                      <button className="border px-3 py-2 text-xs font-semibold">
-                                        Request recount
-                                      </button>
-                                    </form>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              );
-            })}
-        </div>
+                                Recount
+                              </button>
+                            </form>
+                          )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableScroll>
+          )}
+        </Panel>
       </PageBody>
     </>
   );

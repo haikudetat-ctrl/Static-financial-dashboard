@@ -2,11 +2,13 @@ import { Badge, PageHeader, SectionTabs } from "@/components/ui";
 import { getUserContext } from "@/lib/auth/session";
 import { getPrimaryLocation } from "@/lib/inventory/queries";
 import {
-  formatRangeLabel,
+  formatPeriodLabel,
   rangeQuery,
   resolveReportRange,
+  selectablePeriods,
   type ReportRange,
 } from "@/lib/reporting/period-range";
+import type { PeriodSummary } from "@/lib/reporting/types";
 import { getPeriods } from "@/lib/reporting/queries";
 
 import { PeriodPicker } from "./period-picker";
@@ -33,7 +35,12 @@ export async function loadFinancialsContext(
     timeZone: "America/New_York",
   });
   const range = resolveReportRange(await searchParams, periods, today);
-  return { context, locationId, periods, range };
+  // The picker offers periods that have started plus the next one, and
+  // always the period being viewed.
+  const pickable = selectablePeriods(periods, today);
+  const viewing = periods.find((period) => period.id === range.periodId);
+  if (viewing && !pickable.includes(viewing)) pickable.unshift(viewing);
+  return { context, locationId, periods: pickable, range };
 }
 
 const TABS = [
@@ -53,7 +60,7 @@ export function FinancialsHeader({
   title: string;
   active: string;
   range: ReportRange;
-  periods: Array<{ id: string; periodStart: string; periodEnd: string }>;
+  periods: PeriodSummary[];
   actions?: React.ReactNode;
 }) {
   const query = rangeQuery(range);
@@ -80,7 +87,7 @@ export function FinancialsHeader({
               value={range.periodId}
               periods={periods.map((period) => ({
                 id: period.id,
-                label: formatRangeLabel(period.periodStart, period.periodEnd),
+                label: formatPeriodLabel(period),
               }))}
             />
             {actions}

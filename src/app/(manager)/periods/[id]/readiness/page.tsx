@@ -8,6 +8,7 @@ import { getCogsForPeriod, getVarianceByItem } from "@/lib/reporting/queries";
 import { createClient } from "@/lib/supabase/server";
 import { closePeriodAction } from "./actions";
 import { PageBody, PageHeader } from "@/components/ui";
+import { formatPeriodLabel } from "@/lib/reporting/period-range";
 
 export const metadata: Metadata = { title: "Period readiness" };
 
@@ -35,7 +36,9 @@ export default async function PeriodReadinessPage({
   const supabase = await createClient();
   const { data: period } = await supabase
     .from("inventory_periods")
-    .select("id, period_start, period_end, status, closed_at")
+    .select(
+      "id, period_start, period_end, status, closed_at, fiscal_year, period_number",
+    )
     .eq("id", id)
     .single();
   if (!period) notFound();
@@ -55,8 +58,16 @@ export default async function PeriodReadinessPage({
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Financials", href: "/financial-health" }]}
-        title={`Close ${period.period_start} – ${period.period_end}`}
+        breadcrumbs={[
+          { label: "Financials", href: "/financial-health" },
+          { label: "Fiscal calendar", href: "/periods" },
+        ]}
+        title={`Close ${formatPeriodLabel({
+          periodStart: period.period_start,
+          periodEnd: period.period_end,
+          fiscalYear: period.fiscal_year,
+          periodNumber: period.period_number,
+        })}`}
         description={
           <>
             Status: {period.status.replace(/_/g, " ")}
