@@ -23,6 +23,7 @@ import {
 } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 import { formatRangeLabel } from "@/lib/reporting/period-range";
+import { countOpenPriceChanges } from "@/lib/purchasing/price-changes";
 import { getProfitAndLoss } from "@/lib/reporting/queries";
 
 import { loadFinancialsContext } from "../financial-health/financials-context";
@@ -65,6 +66,7 @@ export default async function TodayPage() {
     catalogReview,
     unmappedLines,
     recentInvoices,
+    priceChanges,
   ] = await Promise.all([
     getProfitAndLoss(locationId, range.start, toDate),
     supabase
@@ -119,6 +121,7 @@ export default async function TodayPage() {
       .order("created_at", { ascending: false })
       .limit(6)
       .then((result) => result.data ?? []),
+    countOpenPriceChanges(organizationId, locationId),
   ]);
 
   const queues: Array<{
@@ -133,6 +136,13 @@ export default async function TodayPage() {
       detail: "Check extracted lines and approve to post costs",
       count: invoicesToReview,
       href: "/invoices/upload",
+      tone: "warning",
+    },
+    {
+      label: "Price changes",
+      detail: "Invoice prices that moved 5% or more",
+      count: priceChanges,
+      href: "/purchasing/price-changes",
       tone: "warning",
     },
     {

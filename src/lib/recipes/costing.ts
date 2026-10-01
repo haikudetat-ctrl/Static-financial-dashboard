@@ -7,7 +7,10 @@
  *   2. recipe     – the item's own recipe (house syrups, infusions, batches)
  *   3. manual     – a cost a manager typed in
  *   4. snapshot   – the period's opening cost (e.g. from the workbook import)
- *   5. vendor     – the last price paid, per base unit
+ *   5. vendor     – the last invoice price, per base unit
+ *
+ * A last-invoice price dated after the period cost wins over it, so a new
+ * invoice moves recipe costs right away.
  */
 
 export type CostSource =
@@ -66,6 +69,9 @@ export type CostBookInputs = {
   onHandUnitCost: Map<string, number>;
   snapshotUnitCost: Map<string, number>;
   vendorUnitCost: Map<string, number>;
+  /** ISO dates of the snapshot and invoice prices, when known. */
+  snapshotDate?: Map<string, string>;
+  vendorDate?: Map<string, string>;
 };
 
 export type ItemCost = { unitCost: number | null; source: CostSource };
@@ -121,6 +127,14 @@ export function createCostBook(inputs: CostBookInputs) {
         result = { unitCost: fromRecipe.costPerOutputBase, source: "recipe" };
       } else if (manual !== null && manual !== undefined && manual > 0) {
         result = { unitCost: manual, source: "manual" };
+      } else if (
+        vendor &&
+        vendor > 0 &&
+        snapshot &&
+        (inputs.vendorDate?.get(itemId) ?? "") >
+          (inputs.snapshotDate?.get(itemId) ?? "9999")
+      ) {
+        result = { unitCost: vendor, source: "vendor" };
       } else if (snapshot && snapshot > 0) {
         result = { unitCost: snapshot, source: "snapshot" };
       } else if (vendor && vendor > 0) {
@@ -199,7 +213,46 @@ export function createCostBook(inputs: CostBookInputs) {
     };
   }
 
-  return { itemCost, recipeCost, costComponents };
+  /**
+   * How much of each ingredient one batch of a recipe uses, in base units,
+   * following the same path as its cost: nested recipes and house-made
+   * items costed from their recipe are expanded to what they're made of.
+   */
+  function itemUsage(recipeId: string): Map<string, number> {
+    const usage = new Map<string, number>();
+    const visiting = new Set<string>();
+    const walk = (id: string, multiplier: number) => {
+      const recipe = recipes.get(id);
+      if (!recipe || visiting.has(id)) return;
+      visiting.add(id);
+      for (const component of recipe.components) {
+        const quantityBase = component.quantity * component.factor * multiplier;
+        const nestedId =
+          component.kind === "recipe"
+            ? component.recipeId
+            : itemCost(component.itemId).source === "recipe"
+              ? items.get(component.itemId)?.outputRecipeId
+              : null;
+        const nested = nestedId ? recipes.get(nestedId) : undefined;
+        if (nested && nested.outputQuantity * nested.outputFactor > 0) {
+          walk(
+            nested.id,
+            quantityBase / (nested.outputQuantity * nested.outputFactor),
+          );
+        } else if (component.kind === "inventory") {
+          usage.set(
+            component.itemId,
+            (usage.get(component.itemId) ?? 0) + quantityBase,
+          );
+        }
+      }
+      visiting.delete(id);
+    };
+    walk(recipeId, 1);
+    return usage;
+  }
+
+  return { itemCost, recipeCost, costComponents, itemUsage };
 }
 
 export type CostBook = ReturnType<typeof createCostBook>;

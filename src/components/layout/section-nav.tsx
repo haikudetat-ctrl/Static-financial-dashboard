@@ -5,6 +5,7 @@ const SECTIONS = {
     { label: "Orders", href: "/purchasing" },
     { label: "Suggested order", href: "/purchasing/suggested-order" },
     { label: "Order guide", href: "/purchasing/order-guide" },
+    { label: "Price changes", href: "/purchasing/price-changes" },
     { label: "Receiving", href: "/receiving/review" },
     { label: "Reports", href: "/purchasing/reports" },
   ],
@@ -18,6 +19,7 @@ const SECTIONS = {
   inventory: [
     { label: "Overview", href: "/inventory" },
     { label: "Counts", href: "/inventory/counts" },
+    { label: "Variance", href: "/inventory/variance" },
     { label: "On hand", href: "/inventory/on-hand" },
   ],
   exceptions: [
