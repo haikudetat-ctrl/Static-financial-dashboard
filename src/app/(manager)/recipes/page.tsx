@@ -1,18 +1,57 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { SectionNav } from "@/components/layout/section-nav";
+import {
+  Badge,
+  ButtonLink,
+  EmptyState,
+  PageBody,
+  PageHeader,
+  Panel,
+  StatGrid,
+  StatTile,
+  TableScroll,
+  Tabs,
+  formatMoney,
+  formatPercent,
+  tableClass,
+  tdClass,
+  tdNumClass,
+  thClass,
+  thNumClass,
+} from "@/components/ui";
 import { getUserContext } from "@/lib/auth/session";
 import { getPrimaryLocation } from "@/lib/inventory/queries";
-import {
-  getRecipeCurrentCost,
-  getRecipeWorkspace,
-} from "@/lib/recipes/queries";
-import { SectionNav } from "@/components/layout/section-nav";
-import { PageBody, PageHeader } from "@/components/ui";
+import { loadRecipeCatalog } from "@/lib/recipes/cost-book";
+import { getRecipeWorkspace } from "@/lib/recipes/queries";
+
+import { RecipeSearch } from "./recipe-search";
 
 export const metadata: Metadata = { title: "Recipes" };
 
-export default async function RecipesPage() {
+const FILTERS = [
+  { key: "menu_item", label: "Cocktails" },
+  { key: "batch", label: "Batches" },
+  { key: "prep", label: "Preps" },
+  { key: "all", label: "All" },
+  { key: "archived", label: "Archived" },
+];
+
+const TYPE_LABEL: Record<string, string> = {
+  menu_item: "Cocktail",
+  batch: "Batch",
+  prep: "Prep",
+};
+
+/** Above this pour cost a cocktail is flagged. */
+const TARGET_COST = 0.22;
+
+export default async function RecipesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ type?: string; q?: string }>;
+}) {
   const context = await getUserContext();
   if (!context?.organizationId) return null;
   const locationId = await getPrimaryLocation(
@@ -20,168 +59,193 @@ export default async function RecipesPage() {
     context.locationId,
   );
   if (!locationId) return null;
-  const workspace = await getRecipeWorkspace(
-    context.organizationId,
-    locationId,
+  const { type = "menu_item", q = "" } = await searchParams;
+  const [catalog, workspace] = await Promise.all([
+    loadRecipeCatalog(context.organizationId, locationId),
+    getRecipeWorkspace(context.organizationId, locationId),
+  ]);
+
+  const rows = catalog.recipes.map((recipe) => {
+    const cost = catalog.book.recipeCost(recipe.id);
+    const outputUnit = recipe.version
+      ? catalog.unitById.get(recipe.version.outputUnitId)
+      : undefined;
+    const display =
+      outputUnit &&
+      catalog.units.find(
+        (unit) =>
+          unit.abbreviation ===
+          (
+            { volume: "fl oz", weight: "oz", each: "ea" } as Record<
+              string,
+              string
+            >
+          )[outputUnit.unitType],
+      );
+    return {
+      recipe,
+      cost,
+      costPct:
+        recipe.menuPrice && recipe.menuPrice > 0
+          ? cost.totalCost / recipe.menuPrice
+          : null,
+      perUnit:
+        cost.costPerOutputBase !== null && display
+          ? {
+              value: cost.costPerOutputBase * display.factor,
+              unit: display.abbreviation,
+            }
+          : null,
+    };
+  });
+
+  const term = q.trim().toLowerCase();
+  const visible = rows
+    .filter(({ recipe }) =>
+      type === "archived"
+        ? !recipe.active
+        : recipe.active && (type === "all" || recipe.recipeType === type),
+    )
+    .filter(({ recipe }) => !term || recipe.name.toLowerCase().includes(term));
+
+  const cocktails = rows.filter(
+    ({ recipe }) => recipe.active && recipe.recipeType === "menu_item",
   );
-  const costs = await Promise.all(
-    workspace.recipes.map(async (recipe) => ({
-      id: recipe.id,
-      ...(await getRecipeCurrentCost(
-        context.organizationId!,
-        locationId,
-        recipe.id,
-      )),
-    })),
-  );
-  const costed = costs.filter((row) => row.cost > 0);
-  const averageCost =
-    costed.length > 0
-      ? costed.reduce((sum, row) => sum + row.cost, 0) / costed.length
-      : 0;
+  const priced = cocktails.filter((row) => row.costPct !== null);
+  const avgCostPct = priced.length
+    ? priced.reduce((sum, row) => sum + (row.costPct ?? 0), 0) / priced.length
+    : null;
+  const withMissing = rows.filter(
+    ({ recipe, cost }) => recipe.active && cost.missingCount > 0,
+  ).length;
 
   return (
     <>
       <PageHeader
         title="Recipes"
-        description="Costed recipes and prep, with version history"
+        description="Specs and batches, costed from current ingredient prices"
         actions={
           <>
-            <Link
-              href="/recipes/new"
-              className="inline-flex min-h-12 items-center justify-center bg-[var(--foreground)] px-6 text-sm font-semibold text-white"
-            >
-              Create recipe
-            </Link>
+            <ButtonLink href="/recipes/new?type=batch">New batch</ButtonLink>
+            <ButtonLink href="/recipes/new" variant="primary">
+              New cocktail
+            </ButtonLink>
           </>
         }
       />
       <SectionNav section="recipes" active="/recipes" />
       <PageBody>
-        <div className="grid border-x sm:grid-cols-3">
-          <Metric
-            label="Active recipes"
-            value={String(workspace.activeRecipeCount)}
+        <StatGrid>
+          <StatTile
+            label="Cocktails"
+            value={cocktails.length}
+            detail={`${rows.filter(({ recipe }) => recipe.active && recipe.recipeType !== "menu_item").length} batches and preps`}
           />
-          <Metric
-            label="Missing mappings"
-            value={String(workspace.missingMappingCount)}
+          <StatTile
+            label="Average pour cost"
+            value={formatPercent(avgCostPct)}
+            detail={
+              priced.length
+                ? `Across ${priced.length} cocktails with a menu price`
+                : "Add menu prices to see pour cost"
+            }
           />
-          <Metric
-            label="Average current cost"
-            value={averageCost.toLocaleString("en-US", {
-              style: "currency",
-              currency: "USD",
-            })}
+          <StatTile
+            label="Missing ingredient costs"
+            value={withMissing}
+            tone={withMissing > 0 ? "warning" : "good"}
+            detail="Recipes with an uncosted ingredient"
           />
-        </div>
-
-        <div className="mt-8 grid gap-px border bg-[var(--line)] sm:grid-cols-3">
-          <WorkspaceLink
+          <StatTile
+            label="Unmapped Toast items"
+            value={workspace.missingMappingCount}
+            tone={workspace.missingMappingCount > 0 ? "warning" : "neutral"}
             href="/recipes/mappings"
-            title="Toast mappings"
-            detail="Connect durable Toast menu GUIDs to active recipes."
           />
-          <WorkspaceLink
-            href="/recipes/sales"
-            title="Sales posting"
-            detail="Post mapped PMIX business days without changing physical stock."
-          />
-          <WorkspaceLink
-            href="/recipes/theoretical-usage"
-            title="Theoretical usage"
-            detail="Trace sold menu items through nested recipes to purchased items."
-          />
-        </div>
+        </StatGrid>
 
-        <section className="mt-9">
-          <div className="flex items-end justify-between gap-4">
-            <h2 className="text-xl font-semibold tracking-[-0.025em]">
-              Recipe library
-            </h2>
-            <p className="font-mono text-xs text-[var(--muted)]">
-              Yield variance: {workspace.recentYieldVariance.toFixed(1)} base
-              units
-            </p>
+        <Panel flush>
+          <div className="flex flex-wrap items-end justify-between gap-3 px-4 pt-2">
+            <Tabs
+              items={FILTERS.map((filter) => ({
+                label: filter.label,
+                href: `/recipes?type=${filter.key}${q ? `&q=${encodeURIComponent(q)}` : ""}`,
+                active: type === filter.key,
+              }))}
+            />
+            <div className="pb-2">
+              <RecipeSearch initial={q} />
+            </div>
           </div>
-          <div className="mt-4 overflow-x-auto border">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="border-b bg-[var(--surface)] text-left text-xs font-medium text-[var(--muted)]">
-                <tr>
-                  <th className="px-4 py-2.5">Recipe</th>
-                  <th className="px-4 py-2.5">Type</th>
-                  <th className="px-4 py-2.5">Active version</th>
-                  <th className="px-4 py-2.5 text-right">Current cost</th>
-                </tr>
-              </thead>
-              <tbody>
-                {workspace.recipes.map((recipe) => {
-                  const versions = recipe.recipe_versions as Array<{
-                    id: string;
-                    status: string;
-                    effective_from: string;
-                  }>;
-                  const activeVersion = versions.find(
-                    (version) => version.status === "active",
-                  );
-                  return (
-                    <tr key={recipe.id} className="border-b last:border-b-0">
-                      <td className="px-4 py-2.5 font-medium">
+          {visible.length === 0 ? (
+            <EmptyState
+              title={term ? `No recipes match “${q}”` : "No recipes here yet"}
+              action={
+                <ButtonLink href="/recipes/new" variant="primary">
+                  New cocktail
+                </ButtonLink>
+              }
+            />
+          ) : (
+            <TableScroll>
+              <table className={`${tableClass} min-w-[640px]`}>
+                <thead>
+                  <tr>
+                    <th className={thClass}>Recipe</th>
+                    <th className={thClass}>Type</th>
+                    <th className={thNumClass}>Cost</th>
+                    <th className={thNumClass}>Price</th>
+                    <th className={thNumClass}>Pour cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map(({ recipe, cost, costPct, perUnit }) => (
+                    <tr key={recipe.id} className="hover:bg-[var(--surface)]">
+                      <td className={tdClass}>
                         <Link
                           href={`/recipes/${recipe.id}`}
-                          className="underline decoration-[var(--line)] underline-offset-4"
+                          className="font-medium hover:underline"
                         >
                           {recipe.name}
                         </Link>
+                        {cost.missingCount > 0 && (
+                          <span className="ml-2">
+                            <Badge tone="warning">
+                              {cost.missingCount} uncosted
+                            </Badge>
+                          </span>
+                        )}
                       </td>
-                      <td className="px-4 py-2.5 capitalize">
-                        {recipe.recipe_type.replace("_", " ")}
+                      <td className={`${tdClass} text-[var(--muted)]`}>
+                        {TYPE_LABEL[recipe.recipeType] ?? recipe.recipeType}
                       </td>
-                      <td className="px-4 py-2.5">
-                        {activeVersion?.effective_from ?? "Draft only"}
+                      <td className={tdNumClass}>
+                        {recipe.recipeType === "menu_item" || !perUnit
+                          ? formatMoney(cost.totalCost)
+                          : `${formatMoney(perUnit.value)} / ${perUnit.unit}`}
                       </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">
-                        {(
-                          costs.find((row) => row.id === recipe.id)?.cost ?? 0
-                        ).toLocaleString("en-US", {
-                          style: "currency",
-                          currency: "USD",
-                        })}
+                      <td className={tdNumClass}>
+                        {recipe.menuPrice === null
+                          ? "—"
+                          : formatMoney(recipe.menuPrice)}
+                      </td>
+                      <td
+                        className={`${tdNumClass} ${
+                          costPct !== null && costPct > TARGET_COST
+                            ? "font-semibold text-[var(--danger)]"
+                            : ""
+                        }`}
+                      >
+                        {formatPercent(costPct)}
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                  ))}
+                </tbody>
+              </table>
+            </TableScroll>
+          )}
+        </Panel>
       </PageBody>
     </>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="border-b bg-[var(--surface)] p-5 sm:border-r sm:last:border-r-0">
-      <p className="text-xs font-medium text-[var(--muted)]">{label}</p>
-      <p className="mt-3 text-2xl font-semibold tracking-[-0.035em]">{value}</p>
-    </div>
-  );
-}
-
-function WorkspaceLink({
-  href,
-  title,
-  detail,
-}: {
-  href: string;
-  title: string;
-  detail: string;
-}) {
-  return (
-    <Link href={href} className="bg-white p-5 hover:bg-[#f8f1ea]">
-      <h2 className="font-semibold">{title}</h2>
-      <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{detail}</p>
-    </Link>
   );
 }
