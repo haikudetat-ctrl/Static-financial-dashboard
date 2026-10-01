@@ -16,9 +16,8 @@ const SECTIONS = {
   ],
   inventory: [
     { label: "Overview", href: "/inventory" },
+    { label: "Counts", href: "/inventory/counts" },
     { label: "On hand", href: "/inventory/on-hand" },
-    { label: "Full count", href: "/inventory/counts/new" },
-    { label: "Spot count", href: "/inventory/counts/spot" },
   ],
   exceptions: [
     { label: "Overview", href: "/exceptions" },
