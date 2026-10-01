@@ -1,8 +1,4 @@
-import {
-  calculateRecipeCost,
-  expandRecipeComponents,
-} from "@/lib/recipes/calculations";
-import type { RecipeDefinition } from "@/lib/recipes/types";
+import { loadRecipeCatalog } from "@/lib/recipes/cost-book";
 import { createClient } from "@/lib/supabase/server";
 
 export function relatedName(
@@ -80,31 +76,6 @@ export async function getRecipeWorkspace(
   };
 }
 
-export async function getRecipeSetup(organizationId: string) {
-  const supabase = await createClient();
-  const [{ data: items }, { data: units }, { data: recipes }] =
-    await Promise.all([
-      supabase
-        .from("inventory_items")
-        .select("id, name, base_unit_id, is_produced")
-        .eq("organization_id", organizationId)
-        .eq("active", true)
-        .order("name"),
-      supabase
-        .from("units")
-        .select("id, name, abbreviation, conversion_factor_to_base")
-        .eq("organization_id", organizationId)
-        .order("name"),
-      supabase
-        .from("recipes")
-        .select("id, name, recipe_type")
-        .eq("organization_id", organizationId)
-        .eq("active", true)
-        .order("name"),
-    ]);
-  return { items: items ?? [], units: units ?? [], recipes: recipes ?? [] };
-}
-
 export async function getRecipeDetail(
   organizationId: string,
   recipeId: string,
@@ -156,110 +127,15 @@ export async function getRecipeDetail(
   };
 }
 
+/** Current cost of one recipe, from the shared cost book. */
 export async function getRecipeCurrentCost(
   organizationId: string,
   locationId: string,
   recipeId: string,
 ) {
-  const supabase = await createClient();
-  const { data: recipes } = await supabase
-    .from("recipes")
-    .select("id")
-    .eq("organization_id", organizationId)
-    .eq("active", true);
-  const recipeIds = (recipes ?? []).map((recipe) => recipe.id);
-  if (!recipeIds.length) return { cost: 0, expanded: [] };
-
-  const { data: versions } = await supabase
-    .from("recipe_versions")
-    .select(
-      "id, recipe_id, output_quantity, output_unit_id, units(conversion_factor_to_base)",
-    )
-    .in("recipe_id", recipeIds)
-    .eq("status", "active")
-    .lte("effective_from", new Date().toISOString().slice(0, 10))
-    .or(
-      `effective_to.is.null,effective_to.gte.${new Date().toISOString().slice(0, 10)}`,
-    );
-  const versionIds = (versions ?? []).map((version) => version.id);
-  const { data: components } = versionIds.length
-    ? await supabase
-        .from("recipe_version_components")
-        .select(
-          "recipe_version_id, component_inventory_item_id, component_recipe_id, quantity, units(conversion_factor_to_base)",
-        )
-        .in("recipe_version_id", versionIds)
-    : { data: [] };
-
-  const definitions: Record<string, RecipeDefinition> = {};
-  for (const version of versions ?? []) {
-    definitions[version.recipe_id] = {
-      id: version.recipe_id,
-      outputQuantity: Number(version.output_quantity),
-      components: (components ?? [])
-        .filter((component) => component.recipe_version_id === version.id)
-        .map((component) => {
-          const unit = Array.isArray(component.units)
-            ? component.units[0]
-            : component.units;
-          return component.component_inventory_item_id
-            ? {
-                kind: "inventory" as const,
-                inventoryItemId: component.component_inventory_item_id,
-                quantity: Number(component.quantity),
-                conversionFactorToBase: Number(
-                  unit?.conversion_factor_to_base ?? 1,
-                ),
-              }
-            : {
-                kind: "recipe" as const,
-                recipeId: component.component_recipe_id!,
-                quantity: Number(component.quantity),
-                conversionFactorToBase: Number(
-                  unit?.conversion_factor_to_base ?? 1,
-                ),
-                nestedOutputConversionFactorToBase: Number(
-                  (() => {
-                    const nestedVersion = (versions ?? []).find(
-                      (candidate) =>
-                        candidate.recipe_id === component.component_recipe_id,
-                    );
-                    const nestedUnit = Array.isArray(nestedVersion?.units)
-                      ? nestedVersion.units[0]
-                      : nestedVersion?.units;
-                    return nestedUnit?.conversion_factor_to_base ?? 1;
-                  })(),
-                ),
-              };
-        }),
-    };
-  }
-  if (!definitions[recipeId]) return { cost: 0, expanded: [] };
-
-  const expanded = expandRecipeComponents(recipeId, definitions);
-  const itemIds = expanded.map((row) => row.inventoryItemId);
-  const { data: onHand } = itemIds.length
-    ? await supabase
-        .from("inventory_on_hand")
-        .select("inventory_item_id, quantity, extended_value")
-        .eq("organization_id", organizationId)
-        .eq("location_id", locationId)
-        .in("inventory_item_id", itemIds)
-    : { data: [] };
-  const costByItem = Object.fromEntries(
-    itemIds.map((itemId) => {
-      const rows = (onHand ?? []).filter(
-        (row) => row.inventory_item_id === itemId,
-      );
-      const quantity = rows.reduce((sum, row) => sum + Number(row.quantity), 0);
-      const value = rows.reduce(
-        (sum, row) => sum + Number(row.extended_value),
-        0,
-      );
-      return [itemId, quantity === 0 ? 0 : value / quantity];
-    }),
-  );
-  return { cost: calculateRecipeCost(expanded, costByItem), expanded };
+  const catalog = await loadRecipeCatalog(organizationId, locationId);
+  const cost = catalog.book.recipeCost(recipeId);
+  return { cost: cost.totalCost, missingCount: cost.missingCount };
 }
 
 export async function getActiveProductionRecipes(
