@@ -116,7 +116,7 @@ export function CountSetupForm({
           tone="warning"
           title="No open period covers today"
           action={
-            <a href="/periods/new" className={buttonClass("secondary", "sm")}>
+            <a href="/periods" className={buttonClass("secondary", "sm")}>
               Create period
             </a>
           }

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveReportRange } from "@/lib/reporting/period-range";
+import {
+  formatPeriodLabel,
+  resolveReportRange,
+  selectablePeriods,
+} from "@/lib/reporting/period-range";
 
 const periods = [
   {
@@ -8,12 +12,16 @@ const periods = [
     periodStart: "2026-11-02",
     periodEnd: "2026-11-29",
     status: "draft",
+    fiscalYear: 2026,
+    periodNumber: 11,
   },
   {
     id: "p10",
     periodStart: "2026-10-05",
     periodEnd: "2026-11-01",
     status: "draft",
+    fiscalYear: 2026,
+    periodNumber: 10,
   },
 ];
 
@@ -49,5 +57,28 @@ describe("resolveReportRange", () => {
       start: "2026-09-01",
       end: "2026-09-30",
     });
+  });
+
+  it("opens on the next period before the first one starts", () => {
+    expect(resolveReportRange({}, periods, "2026-10-01").periodId).toBe("p10");
+  });
+
+  it("opens on the latest started period, not a future one", () => {
+    expect(resolveReportRange({}, periods, "2026-12-15").periodId).toBe("p11");
+  });
+
+  it("names fiscal periods", () => {
+    expect(formatPeriodLabel(periods[1])).toBe(
+      "P10 FY26 · Oct 5 – Nov 1, 2026",
+    );
+  });
+
+  it("offers started periods plus the next one", () => {
+    expect(
+      selectablePeriods(periods, "2026-10-01").map((period) => period.id),
+    ).toEqual(["p10"]);
+    expect(
+      selectablePeriods(periods, "2026-10-20").map((period) => period.id),
+    ).toEqual(["p11", "p10"]);
   });
 });

@@ -19,7 +19,6 @@ import {
   getInventorySummary,
   getPrimaryLocation,
 } from "@/lib/inventory/queries";
-import { formatRangeLabel } from "@/lib/reporting/period-range";
 
 import { COUNT_STATUS_LABEL, COUNT_STATUS_TONE } from "./counts/status";
 
@@ -128,11 +127,7 @@ export default async function InventoryPage() {
                       <p className="text-sm font-medium">
                         {count.countType === "full" ? "Full" : "Spot"} count
                         <span className="ml-2 font-normal text-[var(--muted)]">
-                          {count.periodStart &&
-                            formatRangeLabel(
-                              count.periodStart,
-                              count.periodEnd,
-                            )}
+                          {count.periodLabel}
                         </span>
                       </p>
                       <div className="mt-1.5 flex items-center gap-2">

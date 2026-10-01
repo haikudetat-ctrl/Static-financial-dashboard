@@ -9,6 +9,7 @@ describe("application navigation", () => {
     ).toEqual([
       "Overview:Today",
       "Overview:Financials",
+      "Overview:Periods",
       "Operations:Inventory",
       "Operations:Purchasing",
       "Operations:Invoices",

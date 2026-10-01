@@ -190,9 +190,19 @@ export default async function TodayPage() {
       <PageBody>
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="text-sm font-semibold">
-            Period to date
+            {today < range.start
+              ? `${range.name ?? "Next period"} starts ${new Date(
+                  `${range.start}T12:00:00`,
+                ).toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                })}`
+              : `${range.name ?? "Period"} to date`}
             <span className="ml-2 font-normal text-[var(--muted)]">
-              {formatRangeLabel(range.start, toDate)}
+              {today < range.start
+                ? range.label
+                : formatRangeLabel(range.start, toDate)}
             </span>
           </h2>
           <Link

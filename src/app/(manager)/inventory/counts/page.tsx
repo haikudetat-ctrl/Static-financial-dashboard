@@ -19,7 +19,6 @@ import {
 import { getUserContext } from "@/lib/auth/session";
 import { getCountList } from "@/lib/inventory/count-sheet";
 import { getPrimaryLocation } from "@/lib/inventory/queries";
-import { formatRangeLabel } from "@/lib/reporting/period-range";
 
 import { COUNT_STATUS_LABEL, COUNT_STATUS_TONE } from "./status";
 
@@ -105,12 +104,7 @@ export default async function CountsPage() {
                           </span>
                         </td>
                         <td className={`${tdClass} whitespace-nowrap`}>
-                          {count.periodStart
-                            ? formatRangeLabel(
-                                count.periodStart,
-                                count.periodEnd,
-                              )
-                            : "—"}
+                          {count.periodLabel}
                         </td>
                         <td className={tdClass}>
                           <Badge

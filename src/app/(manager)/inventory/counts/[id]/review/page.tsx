@@ -27,7 +27,6 @@ import {
 } from "@/components/ui";
 import { getCountReview, getCountSheet } from "@/lib/inventory/count-sheet";
 import { formatInventoryQuantity } from "@/lib/inventory/counts";
-import { formatRangeLabel } from "@/lib/reporting/period-range";
 
 import { COUNT_STATUS_LABEL, COUNT_STATUS_TONE } from "../../status";
 
@@ -100,8 +99,7 @@ export default async function CountReviewPage({
         title={title}
         description={
           <span className="inline-flex flex-wrap items-center gap-2">
-            {sheet.period &&
-              `Period ${formatRangeLabel(sheet.period.period_start, sheet.period.period_end)}`}
+            {sheet.periodLabel}
             <Badge tone={COUNT_STATUS_TONE[sheet.status] ?? "neutral"}>
               {COUNT_STATUS_LABEL[sheet.status] ?? sheet.status}
             </Badge>

@@ -1,4 +1,23 @@
+import { formatPeriodLabel } from "@/lib/reporting/period-range";
 import { createClient } from "@/lib/supabase/server";
+
+type PeriodRow = {
+  id?: string;
+  period_start: string;
+  period_end: string;
+  fiscal_year: number | null;
+  period_number: number | null;
+};
+
+const labelFor = (period: PeriodRow | null) =>
+  period
+    ? formatPeriodLabel({
+        periodStart: period.period_start,
+        periodEnd: period.period_end,
+        fiscalYear: period.fiscal_year,
+        periodNumber: period.period_number,
+      })
+    : "No period";
 
 type Related<T> = T | T[] | null | undefined;
 const one = <T>(value: Related<T>) =>
@@ -12,8 +31,7 @@ export type CountListRow = {
   countType: "full" | "spot";
   status: string;
   createdAt: string;
-  periodStart: string;
-  periodEnd: string;
+  periodLabel: string;
   assigneeName: string;
   totalLines: number;
   countedLines: number;
@@ -29,7 +47,7 @@ export async function getCountList(
   let query = supabase
     .from("inventory_counts")
     .select(
-      "id, count_type, status, created_at, inventory_periods(period_start, period_end), profiles!inventory_counts_assigned_to_fkey(name, email), inventory_count_assignments(id)",
+      "id, count_type, status, created_at, inventory_periods(period_start, period_end, fiscal_year, period_number), profiles!inventory_counts_assigned_to_fkey(name, email), inventory_count_assignments(id)",
     )
     .eq("organization_id", organizationId)
     .eq("location_id", locationId)
@@ -56,12 +74,7 @@ export async function getCountList(
       const [totalLines, countedLines] = assignmentIds.length
         ? await Promise.all([lineCount(), lineCount("counted")])
         : [0, 0];
-      const period = one(
-        count.inventory_periods as Related<{
-          period_start: string;
-          period_end: string;
-        }>,
-      );
+      const period = one(count.inventory_periods as Related<PeriodRow>);
       const profile = one(
         count.profiles as Related<{ name: string; email: string }>,
       );
@@ -70,8 +83,7 @@ export async function getCountList(
         countType: count.count_type,
         status: count.status,
         createdAt: count.created_at,
-        periodStart: period?.period_start ?? "",
-        periodEnd: period?.period_end ?? "",
+        periodLabel: labelFor(period),
         assigneeName: profile?.name || profile?.email || "Unassigned",
         totalLines,
         countedLines,
@@ -110,7 +122,7 @@ export async function getCountSheet(countId: string) {
   const { data: count } = await supabase
     .from("inventory_counts")
     .select(
-      "id, organization_id, count_type, status, created_at, inventory_periods(id, period_start, period_end), profiles!inventory_counts_assigned_to_fkey(name, email)",
+      "id, organization_id, count_type, status, created_at, inventory_periods(id, period_start, period_end, fiscal_year, period_number), profiles!inventory_counts_assigned_to_fkey(name, email)",
     )
     .eq("id", countId)
     .maybeSingle();
@@ -224,13 +236,7 @@ export async function getCountSheet(countId: string) {
     })
     .sort((a, b) => a.walkOrder - b.walkOrder);
 
-  const period = one(
-    count.inventory_periods as Related<{
-      id: string;
-      period_start: string;
-      period_end: string;
-    }>,
-  );
+  const period = one(count.inventory_periods as Related<PeriodRow>);
   const profile = one(
     count.profiles as Related<{ name: string; email: string }>,
   );
@@ -241,6 +247,7 @@ export async function getCountSheet(countId: string) {
     status: count.status as string,
     createdAt: count.created_at as string,
     period,
+    periodLabel: labelFor(period),
     assigneeName: profile?.name || profile?.email || "Unassigned",
     areas,
   };

@@ -9,7 +9,6 @@ import {
   buttonClass,
 } from "@/components/ui";
 import { getCountSheet } from "@/lib/inventory/count-sheet";
-import { formatRangeLabel } from "@/lib/reporting/period-range";
 
 import { cancelCountAction } from "../actions";
 import { COUNT_STATUS_LABEL, COUNT_STATUS_TONE } from "../status";
@@ -39,9 +38,7 @@ export default async function CountSheetPage({
         title={title}
         description={
           <span className="inline-flex flex-wrap items-center gap-2">
-            {sheet.period
-              ? `Period ${formatRangeLabel(sheet.period.period_start, sheet.period.period_end)}`
-              : "No period"}
+            {sheet.periodLabel}
             {" · "}
             started{" "}
             {new Date(sheet.createdAt).toLocaleDateString("en-US", {

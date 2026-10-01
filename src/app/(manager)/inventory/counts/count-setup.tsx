@@ -4,7 +4,7 @@ import { PageBody, PageHeader } from "@/components/ui";
 import { getUserContext } from "@/lib/auth/session";
 import { findCountPeriod } from "@/lib/inventory/count-period";
 import { getCountSetup, getPrimaryLocation } from "@/lib/inventory/queries";
-import { formatRangeLabel } from "@/lib/reporting/period-range";
+import { formatPeriodLabel } from "@/lib/reporting/period-range";
 
 type Related<T> = T | T[] | null | undefined;
 const one = <T,>(value: Related<T>) =>
@@ -89,7 +89,12 @@ export async function CountSetup({
           countType={countType}
           periodLabel={
             period
-              ? formatRangeLabel(period.period_start, period.period_end)
+              ? formatPeriodLabel({
+                  periodStart: period.period_start,
+                  periodEnd: period.period_end,
+                  fiscalYear: period.fiscal_year,
+                  periodNumber: period.period_number,
+                })
               : null
           }
           staff={[...staff.entries()].map(([id, name]) => ({ id, name }))}

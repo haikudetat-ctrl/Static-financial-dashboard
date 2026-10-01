@@ -15,6 +15,8 @@ export type CountPeriod = {
   period_start: string;
   period_end: string;
   status: string;
+  fiscal_year: number | null;
+  period_number: number | null;
 };
 
 /**
@@ -32,7 +34,7 @@ export async function findCountPeriod(
   horizon.setUTCDate(horizon.getUTCDate() + OPENING_COUNT_LEAD_DAYS);
   const { data: candidates } = await supabase
     .from("inventory_periods")
-    .select("id, period_start, period_end, status")
+    .select("id, period_start, period_end, status, fiscal_year, period_number")
     .eq("organization_id", organizationId)
     .eq("location_id", locationId)
     .neq("status", "closed")

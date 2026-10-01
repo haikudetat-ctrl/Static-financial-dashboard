@@ -10,6 +10,9 @@ export type PeriodSummary = {
   periodStart: string;
   periodEnd: string;
   status: string;
+  /** Fiscal year and period number (1-12) on the 12-period calendar. */
+  fiscalYear?: number | null;
+  periodNumber?: number | null;
 };
 
 export type CogsSummary = {

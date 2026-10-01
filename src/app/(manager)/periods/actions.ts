@@ -1,13 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 
 import { getUserContext } from "@/lib/auth/session";
 import { getPrimaryLocation } from "@/lib/inventory/queries";
 import { createClient } from "@/lib/supabase/server";
 
-export async function createInventoryPeriodAction(formData: FormData) {
+/** Creates the 12 periods of a fiscal year from the organization's pattern. */
+export async function addFiscalYearAction(formData: FormData) {
   const context = await getUserContext();
   if (!context?.organizationId || context.role !== "manager") {
     throw new Error("Manager access required.");
@@ -17,22 +17,18 @@ export async function createInventoryPeriodAction(formData: FormData) {
     context.locationId,
   );
   if (!locationId) throw new Error("No location configured.");
+  const year = Number(formData.get("fiscal_year"));
+  if (!Number.isInteger(year) || year < 2020 || year > 2100) {
+    throw new Error("Choose a fiscal year.");
+  }
 
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("inventory_periods")
-    .insert({
-      organization_id: context.organizationId,
-      location_id: locationId,
-      period_start: String(formData.get("period_start") ?? ""),
-      period_end: String(formData.get("period_end") ?? ""),
-      opened_by: context.user.id,
-    })
-    .select("id")
-    .single();
-
+  const { error } = await supabase.rpc("ensure_fiscal_periods", {
+    target_location_id: locationId,
+    target_year: year,
+  });
   if (error) throw new Error(error.message);
-  revalidatePath("/periods/new");
-  revalidatePath("/financial-health");
-  redirect(`/periods/${data.id}/readiness`);
+
+  revalidatePath("/periods");
+  revalidatePath("/financial-health", "layout");
 }
