@@ -4,6 +4,8 @@ import { postSalesImportAction } from "@/app/(manager)/recipes/actions";
 import { getUserContext } from "@/lib/auth/session";
 import { getPrimaryLocation } from "@/lib/inventory/queries";
 import { getSalesWorkspace } from "@/lib/recipes/queries";
+import { SectionNav } from "@/components/layout/section-nav";
+import { PageBody, PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Sales posting" };
 
@@ -18,14 +20,13 @@ export default async function RecipeSalesPage() {
   const workspace = await getSalesWorkspace(context.organizationId, locationId);
 
   return (
-    <div className="px-5 py-8 sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-5xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
-          Recipes · sales posting
-        </p>
-        <h1 className="mt-2 text-4xl font-semibold tracking-[-0.045em]">
-          Post sales only when every item can expand.
-        </h1>
+    <>
+      <PageHeader
+        title="Sales posting"
+        description="Post Toast sales days to revenue and theoretical usage"
+      />
+      <SectionNav section="recipes" active="/recipes/sales" />
+      <PageBody>
         <section className="mt-7">
           <h2 className="text-lg font-semibold">Toast PMIX imports</h2>
           <div className="mt-3 grid gap-3">
@@ -59,22 +60,24 @@ export default async function RecipeSalesPage() {
         </section>
         <section className="mt-8">
           <h2 className="text-lg font-semibold">Posted business days</h2>
-          <div className="mt-3 overflow-x-auto border">
+          <div className="mt-3 overflow-x-auto rounded-lg border bg-[var(--surface-strong)]">
             <table className="w-full min-w-[620px] text-sm">
-              <thead className="bg-[var(--foreground)] text-left font-mono text-[10px] tracking-[0.1em] text-white uppercase">
+              <thead className="border-b bg-[var(--surface)] text-left text-xs font-medium text-[var(--muted)]">
                 <tr>
-                  <th className="p-3">Business date</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3 text-right">Net sales</th>
-                  <th className="p-3">Posted</th>
+                  <th className="px-4 py-2.5">Business date</th>
+                  <th className="px-4 py-2.5">Status</th>
+                  <th className="px-4 py-2.5 text-right">Net sales</th>
+                  <th className="px-4 py-2.5">Posted</th>
                 </tr>
               </thead>
               <tbody>
                 {workspace.days.map((day) => (
-                  <tr key={day.id} className="border-b bg-white">
-                    <td className="p-3 font-semibold">{day.business_date}</td>
-                    <td className="p-3 capitalize">{day.status}</td>
-                    <td className="p-3 text-right">
+                  <tr key={day.id} className="border-b last:border-b-0">
+                    <td className="px-4 py-2.5 font-medium">
+                      {day.business_date}
+                    </td>
+                    <td className="px-4 py-2.5 capitalize">{day.status}</td>
+                    <td className="px-4 py-2.5 text-right">
                       {Number(day.net_sales).toLocaleString("en-US", {
                         style: "currency",
                         currency: "USD",
@@ -89,7 +92,7 @@ export default async function RecipeSalesPage() {
             </table>
           </div>
         </section>
-      </div>
-    </div>
+      </PageBody>
+    </>
   );
 }

@@ -1,133 +1,397 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, CircleAlert, Clock3 } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
-export const metadata: Metadata = {
-  title: "Today",
-};
+import {
+  Badge,
+  ButtonLink,
+  EmptyState,
+  PageBody,
+  PageHeader,
+  Panel,
+  StatGrid,
+  StatTile,
+  TableScroll,
+  formatMoney,
+  formatPercent,
+  tableClass,
+  tdClass,
+  tdNumClass,
+  thClass,
+  thNumClass,
+  type Tone,
+} from "@/components/ui";
+import { createClient } from "@/lib/supabase/server";
+import { formatRangeLabel } from "@/lib/reporting/period-range";
+import { getProfitAndLoss } from "@/lib/reporting/queries";
 
-const queues = [
-  {
-    label: "Blocking exceptions",
-    value: "0",
-    detail: "Nothing is preventing the next close.",
-    icon: CircleAlert,
-  },
-  {
-    label: "Awaiting review",
-    value: "0",
-    detail: "Imports, receipts, and invoices will appear here.",
-    icon: Clock3,
-  },
-  {
-    label: "System status",
-    value: "Ready",
-    detail: "Tenancy and access controls are configured.",
-    icon: CheckCircle2,
-  },
+import { loadFinancialsContext } from "../financial-health/financials-context";
+
+export const metadata: Metadata = { title: "Today" };
+
+const OPEN_IMPORT_STATUSES = [
+  "received",
+  "extracting",
+  "extracted",
+  "staging",
+  "staged",
+  "mapping",
+  "ready",
+  "failed",
 ];
 
-export default function TodayPage() {
+export default async function TodayPage() {
+  const loaded = await loadFinancialsContext(Promise.resolve({}));
+  if (!loaded) return null;
+  const { context, locationId, range } = loaded;
+  const organizationId = context.organizationId!;
+  const today = new Date().toLocaleDateString("en-CA", {
+    timeZone: "America/New_York",
+  });
+  // Period to date; a period that hasn't started yet shows its first day.
+  const toDate =
+    range.end < today ? range.end : today < range.start ? range.start : today;
+
+  const supabase = await createClient();
+  const count = (query: PromiseLike<{ count: number | null }>) =>
+    Promise.resolve(query).then((result) => result.count ?? 0);
+
+  const [
+    pnl,
+    salesDays,
+    invoicesToReview,
+    openImports,
+    countsInProgress,
+    catalogReview,
+    unmappedLines,
+    recentInvoices,
+  ] = await Promise.all([
+    getProfitAndLoss(locationId, range.start, toDate),
+    supabase
+      .from("sales_business_days")
+      .select("business_date, net_sales")
+      .eq("location_id", locationId)
+      .eq("status", "posted")
+      .order("business_date", { ascending: false })
+      .limit(7)
+      .then((result) => result.data ?? []),
+    count(
+      supabase
+        .from("invoices")
+        .select("id", { count: "exact", head: true })
+        .eq("location_id", locationId)
+        .in("status", ["uploaded", "extracted", "reviewed"]),
+    ),
+    count(
+      supabase
+        .from("source_imports")
+        .select("id", { count: "exact", head: true })
+        .eq("location_id", locationId)
+        .in("status", OPEN_IMPORT_STATUSES),
+    ),
+    count(
+      supabase
+        .from("inventory_counts")
+        .select("id", { count: "exact", head: true })
+        .eq("location_id", locationId)
+        .in("status", ["draft", "in_progress", "counted"]),
+    ),
+    count(
+      supabase
+        .from("catalog_review_items")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
+        .eq("status", "open"),
+    ),
+    count(
+      supabase
+        .from("invoice_lines")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
+        .is("inventory_item_id", null),
+    ),
+    supabase
+      .from("invoices")
+      .select(
+        "id, invoice_number, invoice_date, status, total_amount, vendors(name)",
+      )
+      .eq("location_id", locationId)
+      .order("created_at", { ascending: false })
+      .limit(6)
+      .then((result) => result.data ?? []),
+  ]);
+
+  const queues: Array<{
+    label: string;
+    detail: string;
+    count: number;
+    href: string;
+    tone: Tone;
+  }> = [
+    {
+      label: "Invoices to review",
+      detail: "Check extracted lines and approve to post costs",
+      count: invoicesToReview,
+      href: "/invoices/upload",
+      tone: "warning",
+    },
+    {
+      label: "Imports not posted",
+      detail: "Toast exports waiting to post to sales",
+      count: openImports,
+      href: "/imports",
+      tone: "warning",
+    },
+    {
+      label: "Counts open",
+      detail: "Counts started but not yet approved",
+      count: countsInProgress,
+      href: "/inventory",
+      tone: "accent",
+    },
+    {
+      label: "Invoice lines without an item",
+      detail: "Lines that can't cost inventory until mapped",
+      count: unmappedLines,
+      href: "/exceptions",
+      tone: "warning",
+    },
+    {
+      label: "Catalog questions",
+      detail: "Items from the workbook import that need a decision",
+      count: catalogReview,
+      href: "/exceptions/catalog-review",
+      tone: "neutral",
+    },
+  ];
+  const openQueues = queues.filter((queue) => queue.count > 0);
+  const lastDay = salesDays[0];
+  const dateLabel = new Date(`${today}T12:00:00`).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+
   return (
-    <div className="mx-auto w-full max-w-[1400px] px-4 py-7 sm:px-7 lg:px-10 lg:py-10">
-      <header className="grid gap-5 border-b pb-8 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-end">
-        <div>
-          <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
-            Thursday · June 18
-          </p>
-          <h1 className="mt-3 text-5xl leading-[0.95] font-semibold tracking-[-0.06em] sm:text-6xl">
-            The room is quiet.
-          </h1>
-        </div>
-        <p className="max-w-md text-sm leading-6 text-[var(--muted)] xl:justify-self-end">
-          Reviews, cutoffs, count tasks, and material exceptions will collect
-          here as operational data enters the system.
-        </p>
-      </header>
-
-      <section className="grid border-b md:grid-cols-3">
-        {queues.map((queue) => {
-          const Icon = queue.icon;
-          return (
-            <article
-              key={queue.label}
-              className="border-b py-6 md:border-r md:border-b-0 md:px-6 md:first:pl-0 md:last:border-r-0"
-            >
-              <div className="flex items-center justify-between">
-                <p className="font-mono text-[9px] tracking-[0.13em] text-[var(--muted)] uppercase">
-                  {queue.label}
-                </p>
-                <Icon
-                  size={17}
-                  strokeWidth={1.6}
-                  className="text-[var(--accent)]"
-                  aria-hidden="true"
-                />
-              </div>
-              <p className="mt-5 text-3xl font-semibold tracking-[-0.05em]">
-                {queue.value}
-              </p>
-              <p className="mt-2 text-xs leading-5 text-[var(--muted)]">
-                {queue.detail}
-              </p>
-            </article>
-          );
-        })}
-      </section>
-
-      <section className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,.65fr)]">
-        <div className="min-h-[360px] border bg-[var(--surface)] p-6 shadow-[8px_8px_0_#dedbd2] sm:p-8">
-          <div className="flex items-center justify-between border-b pb-5">
-            <div>
-              <h2 className="text-xl font-semibold tracking-[-0.03em]">
-                Priority queue
-              </h2>
-              <p className="mt-1 text-xs text-[var(--muted)]">
-                Highest-impact work, ordered automatically.
-              </p>
-            </div>
-            <span className="border border-[#bfd0c3] bg-[#edf4ee] px-2.5 py-1 font-mono text-[9px] tracking-[0.1em] text-[#3f6d55] uppercase">
-              All clear
+    <>
+      <PageHeader
+        title="Today"
+        description={dateLabel}
+        actions={
+          <>
+            <ButtonLink href="/imports">Upload sales</ButtonLink>
+            <ButtonLink href="/invoices/upload">Upload invoice</ButtonLink>
+            <ButtonLink href="/inventory/counts/new" variant="primary">
+              Start count
+            </ButtonLink>
+          </>
+        }
+      />
+      <PageBody>
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-sm font-semibold">
+            Period to date
+            <span className="ml-2 font-normal text-[var(--muted)]">
+              {formatRangeLabel(range.start, toDate)}
             </span>
-          </div>
-          <div className="grid min-h-[250px] place-items-center text-center">
-            <div className="max-w-sm">
-              <CheckCircle2
-                size={32}
-                strokeWidth={1.4}
-                className="mx-auto text-[var(--success)]"
-                aria-hidden="true"
-              />
-              <h3 className="mt-5 text-lg font-semibold">
-                No action is required yet.
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                Slice 1 will add imports, mapping queues, and master-data work.
-              </p>
-            </div>
+          </h2>
+          <Link
+            href="/financial-health"
+            className="text-xs font-medium text-[var(--accent-strong)] hover:underline"
+          >
+            Full P&amp;L
+          </Link>
+        </div>
+        <StatGrid>
+          <StatTile
+            label="Net sales"
+            value={formatMoney(pnl.totals.sales, { cents: false })}
+            href="/financial-health"
+          />
+          <StatTile
+            label="Cost of goods"
+            value={formatPercent(pnl.pct.cogs)}
+            detail={`${formatMoney(pnl.totals.cogs, { cents: false })} · estimated until close`}
+            href="/financial-health"
+          />
+          <StatTile
+            label="Prime cost"
+            value={formatPercent(pnl.pct.primeCost)}
+            detail="Cost of goods + labor"
+            href="/financial-health"
+          />
+          <StatTile
+            label="Last sales day"
+            value={
+              lastDay
+                ? formatMoney(Number(lastDay.net_sales), { cents: false })
+                : "—"
+            }
+            detail={
+              lastDay
+                ? new Date(
+                    `${lastDay.business_date}T12:00:00`,
+                  ).toLocaleDateString("en-US", {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                  })
+                : "No Toast sales posted yet"
+            }
+            href="/imports"
+          />
+        </StatGrid>
+
+        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <Panel
+            title="Needs attention"
+            actions={
+              openQueues.length > 0 ? (
+                <Badge tone="warning">{openQueues.length} open</Badge>
+              ) : (
+                <Badge tone="good">All clear</Badge>
+              )
+            }
+            flush
+          >
+            <ul>
+              {queues.map((queue) => (
+                <li key={queue.label} className="border-b last:border-b-0">
+                  <Link
+                    href={queue.href}
+                    className="flex items-center gap-3 px-4 py-3 transition hover:bg-[var(--surface)]"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`text-sm font-medium ${queue.count ? "" : "text-[var(--muted)]"}`}
+                      >
+                        {queue.label}
+                      </p>
+                      <p className="text-xs text-[var(--muted)]">
+                        {queue.detail}
+                      </p>
+                    </div>
+                    {queue.count > 0 ? (
+                      <Badge tone={queue.tone}>{queue.count}</Badge>
+                    ) : (
+                      <span className="text-xs text-[var(--muted)]">None</span>
+                    )}
+                    <ChevronRight
+                      aria-hidden="true"
+                      className="size-4 text-[var(--muted)]"
+                    />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+
+          <div className="grid gap-5">
+            <Panel title="Recent sales days" flush>
+              {salesDays.length === 0 ? (
+                <EmptyState
+                  title="No sales posted yet"
+                  detail="Upload last night's Toast product mix export to start."
+                  action={
+                    <ButtonLink href="/imports" size="sm">
+                      Upload sales
+                    </ButtonLink>
+                  }
+                />
+              ) : (
+                <TableScroll>
+                  <table className={tableClass}>
+                    <thead>
+                      <tr>
+                        <th className={thClass}>Business day</th>
+                        <th className={thNumClass}>Net sales</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {salesDays.map((day) => (
+                        <tr key={day.business_date}>
+                          <td className={tdClass}>
+                            {new Date(
+                              `${day.business_date}T12:00:00`,
+                            ).toLocaleDateString("en-US", {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </td>
+                          <td className={tdNumClass}>
+                            {formatMoney(Number(day.net_sales))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </TableScroll>
+              )}
+            </Panel>
+            <Panel
+              title="Recent invoices"
+              actions={
+                <Link
+                  href="/invoices/upload"
+                  className="text-xs font-medium text-[var(--accent-strong)] hover:underline"
+                >
+                  All invoices
+                </Link>
+              }
+              flush
+            >
+              {recentInvoices.length === 0 ? (
+                <EmptyState title="No invoices yet" />
+              ) : (
+                <TableScroll>
+                  <table className={tableClass}>
+                    <tbody>
+                      {recentInvoices.map((invoice) => {
+                        const vendor = Array.isArray(invoice.vendors)
+                          ? invoice.vendors[0]
+                          : invoice.vendors;
+                        return (
+                          <tr key={invoice.id}>
+                            <td className={tdClass}>
+                              <Link
+                                href={`/invoices/${invoice.id}/review`}
+                                className="font-medium hover:underline"
+                              >
+                                {vendor?.name ?? "Vendor"}
+                              </Link>
+                              <p className="text-xs text-[var(--muted)]">
+                                #{invoice.invoice_number} ·{" "}
+                                {invoice.invoice_date}
+                              </p>
+                            </td>
+                            <td className={`${tdClass} text-right`}>
+                              <Badge
+                                tone={
+                                  invoice.status === "posted"
+                                    ? "good"
+                                    : invoice.status === "rejected"
+                                      ? "danger"
+                                      : "warning"
+                                }
+                              >
+                                {invoice.status}
+                              </Badge>
+                            </td>
+                            <td className={tdNumClass}>
+                              {formatMoney(Number(invoice.total_amount))}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </TableScroll>
+              )}
+            </Panel>
           </div>
         </div>
-
-        <aside className="border bg-[#20241f] p-6 text-white sm:p-8">
-          <p className="font-mono text-[9px] tracking-[0.15em] text-[#e5a36d] uppercase">
-            Next foundation
-          </p>
-          <h2 className="mt-4 text-3xl leading-[1.02] font-semibold tracking-[-0.045em]">
-            Build the source of truth.
-          </h2>
-          <p className="mt-4 text-sm leading-6 text-[#c7cbc4]">
-            Units, inventory items, vendors, order guides, and historical source
-            staging arrive in the next slice.
-          </p>
-          <Link
-            href="/inventory"
-            className="mt-8 inline-flex min-h-11 items-center gap-2 border border-[#697067] px-4 text-sm font-semibold transition hover:bg-white hover:text-[#20241f] active:translate-y-px"
-          >
-            View inventory shell
-            <ArrowRight size={16} strokeWidth={1.7} aria-hidden="true" />
-          </Link>
-        </aside>
-      </section>
-    </div>
+      </PageBody>
+    </>
   );
 }

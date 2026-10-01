@@ -2,6 +2,13 @@
 
 import { useRef, useState, useCallback } from "react";
 import { readUploadResponse } from "@/components/imports/upload-response";
+import { buttonClass, inputClass, labelClass } from "@/components/ui";
+
+/** Yesterday in the bar's timezone: the usual day a nightly export covers. */
+function yesterday() {
+  const date = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  return date.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
 
 type UploadState = "idle" | "uploading" | "done" | "duplicate" | "error";
 
@@ -16,16 +23,20 @@ export function UploadForm({
   label,
   accept,
   onComplete,
+  askBusinessDate = false,
 }: {
   sourceType: string;
   label: string;
   accept: string;
+  /** Show a business-date field (nightly POS exports). */
+  askBusinessDate?: boolean;
   onComplete?: (result: UploadResult) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<UploadState>("idle");
   const [message, setMessage] = useState("");
   const [importId, setImportId] = useState<string | null>(null);
+  const [businessDate, setBusinessDate] = useState(yesterday);
 
   const handleUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -39,6 +50,7 @@ export function UploadForm({
         const formData = new FormData();
         formData.append("file", file);
         formData.append("sourceType", sourceType);
+        if (askBusinessDate) formData.append("businessDate", businessDate);
 
         const response = await fetch("/api/upload", {
           method: "POST",
@@ -79,7 +91,7 @@ export function UploadForm({
         );
       }
     },
-    [sourceType, onComplete],
+    [sourceType, onComplete, askBusinessDate, businessDate],
   );
 
   return (
@@ -94,13 +106,26 @@ export function UploadForm({
       />
 
       {state === "idle" && (
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="inline-flex min-h-11 items-center gap-2 bg-[var(--foreground)] px-4 text-sm font-semibold text-white hover:bg-[#343a32] active:translate-y-px"
-        >
-          Upload {label}
-        </button>
+        <div className="flex flex-wrap items-end gap-2">
+          {askBusinessDate && (
+            <label className={labelClass}>
+              Business day
+              <input
+                type="date"
+                value={businessDate}
+                onChange={(event) => setBusinessDate(event.target.value)}
+                className={`${inputClass} w-40`}
+              />
+            </label>
+          )}
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className={buttonClass("primary")}
+          >
+            Upload {label}
+          </button>
+        </div>
       )}
 
       {state === "uploading" && (
@@ -108,7 +133,7 @@ export function UploadForm({
       )}
 
       {(state === "done" || state === "duplicate") && importId && (
-        <div className="grid gap-2">
+        <div className="grid justify-items-start gap-2">
           <p
             className={`text-sm ${
               state === "duplicate" ? "text-[#a68b2f]" : "text-[var(--success)]"
@@ -118,7 +143,7 @@ export function UploadForm({
           </p>
           <a
             href={`/imports/${importId}`}
-            className="inline-flex min-h-9 items-center gap-1 border px-3 text-xs font-semibold hover:bg-[var(--surface)]"
+            className={buttonClass("secondary", "sm")}
           >
             Review import
           </a>
@@ -126,7 +151,7 @@ export function UploadForm({
       )}
 
       {state === "error" && (
-        <div className="grid gap-2">
+        <div className="grid justify-items-start gap-2">
           <p className="text-sm text-[#a63f2f]">{message}</p>
           <button
             type="button"
@@ -134,7 +159,7 @@ export function UploadForm({
               setState("idle");
               setMessage("");
             }}
-            className="inline-flex min-h-9 items-center gap-1 border px-3 text-xs font-semibold"
+            className={buttonClass("secondary", "sm")}
           >
             Try again
           </button>

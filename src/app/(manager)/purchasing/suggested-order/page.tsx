@@ -8,6 +8,8 @@ import {
   getSuggestedOrder,
   getVendorOrderRules,
 } from "@/lib/purchasing/queries";
+import { SectionNav } from "@/components/layout/section-nav";
+import { PageBody, PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Suggested order" };
 
@@ -30,19 +32,18 @@ export default async function SuggestedOrderPage() {
   ).padStart(2, "0")}`;
 
   return (
-    <div className="px-5 py-8 sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-6xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
-          Purchasing · suggested order
-        </p>
-        <h1 className="mt-2 text-4xl font-semibold tracking-[-0.045em]">
-          Buy the gap, rounded to reality.
-        </h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-          Each suggestion subtracts posted on-hand and open purchase orders from
-          par, then rounds to a valid pack.
-        </p>
-
+    <>
+      <PageHeader
+        title="Suggested order"
+        description={
+          <>
+            Each suggestion subtracts posted on-hand and open purchase orders
+            from par, then rounds to a valid pack.
+          </>
+        }
+      />
+      <SectionNav section="purchasing" active="/purchasing/suggested-order" />
+      <PageBody>
         <div className="mt-7 grid gap-7">
           {vendorIds.map((vendorId) => {
             const vendorRows = rows.filter((row) => row.vendorId === vendorId);
@@ -70,7 +71,7 @@ export default async function SuggestedOrderPage() {
               <form
                 key={vendorId}
                 action={createPurchaseOrderAction}
-                className="border bg-white"
+                className="rounded-lg border bg-[var(--surface-strong)]"
               >
                 <input type="hidden" name="vendor_id" value={vendorId} />
                 <header className="flex flex-col justify-between gap-3 border-b p-5 sm:flex-row sm:items-center">
@@ -102,18 +103,18 @@ export default async function SuggestedOrderPage() {
                   <table className="w-full min-w-[980px] text-sm">
                     <thead className="text-left font-mono text-[10px] tracking-[0.1em] text-[var(--muted)] uppercase">
                       <tr className="border-b">
-                        <th className="p-3">Item</th>
-                        <th className="p-3 text-right">Par</th>
-                        <th className="p-3 text-right">On hand</th>
-                        <th className="p-3 text-right">Open PO</th>
-                        <th className="p-3 text-right">Price</th>
-                        <th className="p-3">Order quantity</th>
+                        <th className="px-4 py-2.5">Item</th>
+                        <th className="px-4 py-2.5 text-right">Par</th>
+                        <th className="px-4 py-2.5 text-right">On hand</th>
+                        <th className="px-4 py-2.5 text-right">Open PO</th>
+                        <th className="px-4 py-2.5 text-right">Price</th>
+                        <th className="px-4 py-2.5">Order quantity</th>
                       </tr>
                     </thead>
                     <tbody>
                       {vendorRows.map((row) => (
                         <tr key={row.vendorItemId} className="border-b">
-                          <td className="p-3">
+                          <td className="px-4 py-2.5">
                             <p className="font-semibold">{row.itemName}</p>
                             <p className="mt-1 max-w-md text-xs text-[var(--muted)]">
                               {row.explanation}
@@ -139,19 +140,19 @@ export default async function SuggestedOrderPage() {
                               value={row.packSize}
                             />
                           </td>
-                          <td className="p-3 text-right tabular-nums">
+                          <td className="px-4 py-2.5 text-right tabular-nums">
                             {row.targetPar}
                           </td>
-                          <td className="p-3 text-right tabular-nums">
+                          <td className="px-4 py-2.5 text-right tabular-nums">
                             {row.onHand.toFixed(1)}
                           </td>
-                          <td className="p-3 text-right tabular-nums">
+                          <td className="px-4 py-2.5 text-right tabular-nums">
                             {row.openPoQuantity}
                           </td>
-                          <td className="p-3 text-right tabular-nums">
+                          <td className="px-4 py-2.5 text-right tabular-nums">
                             ${row.unitPrice.toFixed(2)}
                           </td>
-                          <td className="p-3">
+                          <td className="px-4 py-2.5">
                             <input
                               className="w-28 border px-3 py-2 tabular-nums"
                               type="number"
@@ -170,10 +171,10 @@ export default async function SuggestedOrderPage() {
                 <div className="grid gap-3 p-5 sm:grid-cols-[1fr_auto]">
                   <input
                     name="manager_notes"
-                    className="border px-3 py-3 text-sm"
+                    className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                     placeholder="Manager notes"
                   />
-                  <button className="min-h-12 bg-[var(--foreground)] px-6 text-sm font-semibold text-white">
+                  <button className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--foreground)] bg-[var(--foreground)] px-3.5 text-sm font-medium text-white transition hover:bg-[#343a32] disabled:cursor-not-allowed disabled:opacity-50">
                     Create draft PO
                   </button>
                 </div>
@@ -186,7 +187,7 @@ export default async function SuggestedOrderPage() {
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </PageBody>
+    </>
   );
 }

@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { getUserContext } from "@/lib/auth/session";
 import { getCountSetup, getPrimaryLocation } from "@/lib/inventory/queries";
 import { createInventoryCountAction } from "../actions";
+import { SectionNav } from "@/components/layout/section-nav";
+import { PageBody, PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "New full count" };
 
@@ -77,29 +79,21 @@ export function CountSetupPage({
   }>;
 }) {
   return (
-    <div className="px-5 py-8 sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-3xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
-          {countType === "full" ? "Full inventory" : "Spot count"}
-        </p>
-        <h1 className="mt-3 text-4xl font-semibold tracking-[-0.045em]">
-          {title}
-        </h1>
-        <p className="mt-4 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-          {description}
-        </p>
-
+    <>
+      <PageHeader title={title} description={<>{description}</>} />
+      <SectionNav section="inventory" active="/inventory/counts/new" />
+      <PageBody narrow>
         <form
           action={createInventoryCountAction}
           className="mt-8 border bg-[var(--surface-strong)] p-5 sm:p-7"
         >
           <input type="hidden" name="count_type" value={countType} />
-          <label className="grid gap-2 text-sm font-semibold">
+          <label className="grid gap-1 text-xs font-medium">
             Assign to
             <select
               name="assigned_profile_id"
               required
-              className="h-12 border bg-white px-3 text-base font-normal"
+              className="h-9 rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 text-sm font-normal text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
             >
               {staff.map((member) => {
                 const profile = Array.isArray(member.profiles)
@@ -145,7 +139,7 @@ export function CountSetupPage({
             Generate assignments
           </button>
         </form>
-      </div>
-    </div>
+      </PageBody>
+    </>
   );
 }

@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { mapToastItemAction } from "@/app/(manager)/recipes/actions";
 import { getUserContext } from "@/lib/auth/session";
 import { getToastMappingQueue } from "@/lib/recipes/queries";
+import { SectionNav } from "@/components/layout/section-nav";
+import { PageBody, PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Toast recipe mappings" };
 
@@ -12,14 +14,13 @@ export default async function RecipeMappingsPage() {
   const workspace = await getToastMappingQueue(context.organizationId);
 
   return (
-    <div className="px-5 py-8 sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-4xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
-          Recipes · Toast mappings
-        </p>
-        <h1 className="mt-2 text-4xl font-semibold tracking-[-0.045em]">
-          Map the durable GUID, not the display name.
-        </h1>
+    <>
+      <PageHeader
+        title="Menu mappings"
+        description="Toast menu items mapped to recipes by GUID"
+      />
+      <SectionNav section="recipes" active="/recipes/mappings" />
+      <PageBody narrow>
         <div className="mt-7 grid gap-4">
           {workspace.queue.map((item) => (
             <form
@@ -46,7 +47,7 @@ export default async function RecipeMappingsPage() {
               <select
                 name="recipe_id"
                 required
-                className="border bg-white px-3 py-3 text-sm"
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
               >
                 <option value="">Choose menu recipe</option>
                 {workspace.recipes.map((recipe) => (
@@ -55,7 +56,7 @@ export default async function RecipeMappingsPage() {
                   </option>
                 ))}
               </select>
-              <button className="min-h-11 bg-[var(--foreground)] px-5 text-sm font-semibold text-white">
+              <button className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--foreground)] bg-[var(--foreground)] px-3.5 text-sm font-medium text-white transition hover:bg-[#343a32] disabled:cursor-not-allowed disabled:opacity-50">
                 Map
               </button>
             </form>
@@ -66,7 +67,7 @@ export default async function RecipeMappingsPage() {
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </PageBody>
+    </>
   );
 }

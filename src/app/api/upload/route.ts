@@ -22,6 +22,10 @@ export async function POST(request: Request) {
   const file = formData.get("file") as File | null;
   const sourceType = String(formData.get("sourceType") ?? "");
   const parserVersion = String(formData.get("parserVersion") ?? "1.0.0");
+  const rawBusinessDate = String(formData.get("businessDate") ?? "");
+  const businessDate = /^\d{4}-\d{2}-\d{2}$/.test(rawBusinessDate)
+    ? rawBusinessDate
+    : null;
 
   if (!file) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -73,6 +77,7 @@ export async function POST(request: Request) {
       organizationId: context.organizationId,
       locationId,
       parserVersion,
+      businessDate,
     });
 
     // Re-extract if previous attempt never created mapping queue items

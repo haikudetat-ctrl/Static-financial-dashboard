@@ -39,7 +39,7 @@ export default async function ReceivePage() {
   return (
     <div className="px-4 py-6">
       <div className="mx-auto max-w-xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
+        <p className="text-xs font-medium text-[var(--accent-strong)]">
           Receiving
         </p>
         <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em]">
@@ -60,7 +60,11 @@ export default async function ReceivePage() {
               inventory_items: { name: string } | { name: string }[] | null;
             }>;
             return (
-              <form key={order.id} action={action} className="border bg-white">
+              <form
+                key={order.id}
+                action={action}
+                className="rounded-lg border bg-[var(--surface-strong)]"
+              >
                 <header className="bg-[var(--foreground)] p-4 text-white">
                   <p className="font-mono text-[10px] tracking-[0.13em] text-[#bdc2bb] uppercase">
                     {order.status.replace("_", " ")} · {order.order_date}
@@ -106,12 +110,12 @@ export default async function ReceivePage() {
                   />
                   <input
                     name="notes"
-                    className="border px-3 py-3 text-sm"
+                    className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                     placeholder="Receiving notes"
                   />
                   <select
                     name="exception_type"
-                    className="border bg-white px-3 py-3 text-sm"
+                    className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                     defaultValue=""
                   >
                     <option value="">No exception — receive all</option>
@@ -123,7 +127,7 @@ export default async function ReceivePage() {
                   </select>
                   <input
                     name="exception_description"
-                    className="border px-3 py-3 text-sm"
+                    className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                     placeholder="Describe the exception, if any"
                   />
                   <button className="mt-2 min-h-12 border-2 border-[var(--foreground)] px-4 text-sm font-semibold">
@@ -141,7 +145,7 @@ export default async function ReceivePage() {
               </p>
             </div>
           )}
-          <details className="border bg-white">
+          <details className="rounded-lg border bg-[var(--surface-strong)]">
             <summary className="cursor-pointer p-4 text-sm font-semibold">
               Receive a delivery without a PO
             </summary>
@@ -156,7 +160,7 @@ export default async function ReceivePage() {
               <select
                 name="vendor_id"
                 required
-                className="border bg-white px-3 py-3 text-sm"
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
               >
                 <option value="">Choose vendor</option>
                 {(vendors ?? []).map((vendor) => (
@@ -168,7 +172,7 @@ export default async function ReceivePage() {
               <select
                 name="inventory_item_id"
                 required
-                className="border bg-white px-3 py-3 text-sm"
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
               >
                 <option value="">Choose mapped item</option>
                 {(items ?? []).map((item) => (
@@ -184,7 +188,7 @@ export default async function ReceivePage() {
                   type="number"
                   min="0.001"
                   step="0.001"
-                  className="border px-3 py-3 text-sm"
+                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                   placeholder="Quantity"
                 />
                 <input
@@ -193,18 +197,18 @@ export default async function ReceivePage() {
                   type="number"
                   min="0"
                   step="0.01"
-                  className="border px-3 py-3 text-sm"
+                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                   placeholder="Unit price"
                 />
               </div>
               <input
                 name="document_file_path"
-                className="border px-3 py-3 text-sm"
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                 placeholder="Document path or reference"
               />
               <input
                 name="exception_description"
-                className="border px-3 py-3 text-sm"
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                 placeholder="Why was there no PO?"
               />
               <button className="min-h-12 border-2 border-[var(--foreground)] px-4 text-sm font-semibold">

@@ -23,7 +23,7 @@ export default async function ProductionPage() {
   return (
     <div className="px-4 py-6">
       <div className="mx-auto max-w-xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
+        <p className="text-xs font-medium text-[var(--accent-strong)]">
           Prep production
         </p>
         <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em]">
@@ -66,7 +66,11 @@ export default async function ProductionPage() {
               ? version.units[0]
               : version.units;
             return (
-              <form key={recipe.id} action={action} className="border bg-white">
+              <form
+                key={recipe.id}
+                action={action}
+                className="rounded-lg border bg-[var(--surface-strong)]"
+              >
                 <header className="bg-[var(--foreground)] p-4 text-white">
                   <p className="font-mono text-[10px] tracking-[0.13em] text-[#bdc2bb] uppercase">
                     {recipe.recipe_type}
@@ -105,7 +109,7 @@ export default async function ProductionPage() {
                       min="0.000001"
                       step="0.000001"
                       defaultValue={Number(version.output_quantity)}
-                      className="border px-3 py-3 text-sm"
+                      className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                       aria-label={`${recipe.name} planned output`}
                     />
                     <input
@@ -115,7 +119,7 @@ export default async function ProductionPage() {
                       min="0.000001"
                       step="0.000001"
                       defaultValue={Number(version.output_quantity)}
-                      className="border px-3 py-3 text-sm"
+                      className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                       aria-label={`${recipe.name} actual output`}
                     />
                   </div>

@@ -1,12 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  ArrowRight,
-  ClipboardCheck,
-  ScanSearch,
-  Warehouse,
-} from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
+import {
+  ButtonLink,
+  PageBody,
+  PageHeader,
+  Panel,
+  StatGrid,
+  StatTile,
+  formatMoney,
+} from "@/components/ui";
+
+import { SectionNav } from "@/components/layout/section-nav";
 import { getUserContext } from "@/lib/auth/session";
 import {
   getInventorySummary,
@@ -30,105 +36,93 @@ export default async function InventoryPage() {
           activeCountCount: 0,
         };
 
-  const actions = [
-    {
-      href: "/inventory/counts/new",
-      label: "Start full count",
-      detail: "Build assignments in storage walk order.",
-      icon: ClipboardCheck,
-    },
-    {
-      href: "/inventory/counts/spot",
-      label: "Start spot count",
-      detail: "Verify a focused set of storage zones.",
-      icon: ScanSearch,
-    },
-    {
-      href: "/inventory/on-hand",
-      label: "View on hand",
-      detail: "See posted quantity, value, and last movement.",
-      icon: Warehouse,
-    },
-  ];
-
   return (
-    <div className="px-5 py-8 sm:px-8 lg:px-10 lg:py-10">
-      <div className="mx-auto max-w-6xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
-          Inventory
-        </p>
-        <div className="mt-3 flex flex-col justify-between gap-5 border-b pb-7 lg:flex-row lg:items-end">
-          <div>
-            <h1 className="max-w-2xl text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
-              Physical stock, without the fog.
-            </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-              Counts establish verified truth. Posted movements carry the
-              projection forward without rewriting history.
-            </p>
-          </div>
-          <div className="font-mono text-xs text-[var(--muted)]">
-            {summary.activeCountCount} active count
-            {summary.activeCountCount === 1 ? "" : "s"}
-          </div>
-        </div>
-
-        <div className="grid border-x sm:grid-cols-3">
-          <Metric
+    <>
+      <PageHeader
+        title="Inventory"
+        description={`${summary.activeCountCount} active count${summary.activeCountCount === 1 ? "" : "s"}`}
+        actions={
+          <>
+            <ButtonLink href="/inventory/on-hand">On hand</ButtonLink>
+            <ButtonLink href="/inventory/counts/spot">Spot count</ButtonLink>
+            <ButtonLink href="/inventory/counts/new" variant="primary">
+              Start full count
+            </ButtonLink>
+          </>
+        }
+      />
+      <SectionNav section="inventory" active="/inventory" />
+      <PageBody>
+        <StatGrid>
+          <StatTile
             label="Inventory value"
-            value={summary.inventoryValue.toLocaleString("en-US", {
-              style: "currency",
-              currency: "USD",
-            })}
+            value={formatMoney(summary.inventoryValue, { cents: false })}
+            href="/inventory/on-hand"
           />
-          <Metric
+          <StatTile
             label="Last verified"
             value={
               summary.lastVerifiedAt
-                ? new Date(summary.lastVerifiedAt).toLocaleDateString()
+                ? new Date(summary.lastVerifiedAt).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  })
                 : "Never"
             }
+            detail="Most recent approved count"
           />
-          <Metric
+          <StatTile
             label="Negative items"
-            value={String(summary.negativeCount)}
+            value={summary.negativeCount}
+            tone={summary.negativeCount > 0 ? "danger" : "neutral"}
+            href="/exceptions/negative-inventory"
           />
-        </div>
-
-        <div className="mt-8 grid gap-px border bg-[var(--line)] sm:grid-cols-3">
-          {actions.map(({ href, label, detail, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className="group bg-[var(--surface-strong)] p-6 transition hover:bg-[#f8f1ea]"
-            >
-              <Icon size={22} strokeWidth={1.6} aria-hidden="true" />
-              <h2 className="mt-8 text-xl font-semibold tracking-[-0.025em]">
-                {label}
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                {detail}
-              </p>
-              <ArrowRight
-                className="mt-7 transition group-hover:translate-x-1"
-                size={18}
-                aria-hidden="true"
-              />
-            </Link>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="border-b bg-[var(--surface)] p-5 sm:border-r sm:last:border-r-0">
-      <p className="font-mono text-[10px] tracking-[0.14em] text-[var(--muted)] uppercase">
-        {label}
-      </p>
-      <p className="mt-3 text-2xl font-semibold tracking-[-0.035em]">{value}</p>
-    </div>
+          <StatTile
+            label="Active counts"
+            value={summary.activeCountCount}
+            tone={summary.activeCountCount > 0 ? "accent" : "neutral"}
+          />
+        </StatGrid>
+        <Panel title="Counting" flush>
+          <ul>
+            {[
+              {
+                href: "/inventory/counts/new",
+                label: "Full count",
+                detail: "Every item, assigned in shelf walk order.",
+              },
+              {
+                href: "/inventory/counts/spot",
+                label: "Spot count",
+                detail: "Verify a few storage areas between full counts.",
+              },
+              {
+                href: "/inventory/on-hand",
+                label: "On hand",
+                detail: "Posted quantity, value, and last movement per item.",
+              },
+            ].map((action) => (
+              <li key={action.href} className="border-b last:border-b-0">
+                <Link
+                  href={action.href}
+                  className="flex items-center gap-3 px-4 py-3 transition hover:bg-[var(--surface)]"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{action.label}</p>
+                    <p className="text-xs text-[var(--muted)]">
+                      {action.detail}
+                    </p>
+                  </div>
+                  <ChevronRight
+                    aria-hidden="true"
+                    className="size-4 text-[var(--muted)]"
+                  />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      </PageBody>
+    </>
   );
 }

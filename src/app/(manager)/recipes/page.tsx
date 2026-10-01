@@ -7,6 +7,8 @@ import {
   getRecipeCurrentCost,
   getRecipeWorkspace,
 } from "@/lib/recipes/queries";
+import { SectionNav } from "@/components/layout/section-nav";
+import { PageBody, PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Recipes" };
 
@@ -39,29 +41,23 @@ export default async function RecipesPage() {
       : 0;
 
   return (
-    <div className="px-5 py-8 sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-6xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
-          Recipes
-        </p>
-        <div className="mt-2 flex flex-col justify-between gap-5 border-b pb-7 lg:flex-row lg:items-end">
-          <div>
-            <h1 className="text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
-              Cost the menu as it is made.
-            </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-              Effective-dated recipes preserve history. Nested prep expands to
-              purchased ingredients for theoretical usage.
-            </p>
-          </div>
-          <Link
-            href="/recipes/new"
-            className="inline-flex min-h-12 items-center justify-center bg-[var(--foreground)] px-6 text-sm font-semibold text-white"
-          >
-            Create recipe
-          </Link>
-        </div>
-
+    <>
+      <PageHeader
+        title="Recipes"
+        description="Costed recipes and prep, with version history"
+        actions={
+          <>
+            <Link
+              href="/recipes/new"
+              className="inline-flex min-h-12 items-center justify-center bg-[var(--foreground)] px-6 text-sm font-semibold text-white"
+            >
+              Create recipe
+            </Link>
+          </>
+        }
+      />
+      <SectionNav section="recipes" active="/recipes" />
+      <PageBody>
         <div className="grid border-x sm:grid-cols-3">
           <Metric
             label="Active recipes"
@@ -110,12 +106,12 @@ export default async function RecipesPage() {
           </div>
           <div className="mt-4 overflow-x-auto border">
             <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-[var(--foreground)] text-left font-mono text-[10px] tracking-[0.1em] text-white uppercase">
+              <thead className="border-b bg-[var(--surface)] text-left text-xs font-medium text-[var(--muted)]">
                 <tr>
-                  <th className="p-3">Recipe</th>
-                  <th className="p-3">Type</th>
-                  <th className="p-3">Active version</th>
-                  <th className="p-3 text-right">Current cost</th>
+                  <th className="px-4 py-2.5">Recipe</th>
+                  <th className="px-4 py-2.5">Type</th>
+                  <th className="px-4 py-2.5">Active version</th>
+                  <th className="px-4 py-2.5 text-right">Current cost</th>
                 </tr>
               </thead>
               <tbody>
@@ -129,8 +125,8 @@ export default async function RecipesPage() {
                     (version) => version.status === "active",
                   );
                   return (
-                    <tr key={recipe.id} className="border-b bg-white">
-                      <td className="p-3 font-semibold">
+                    <tr key={recipe.id} className="border-b last:border-b-0">
+                      <td className="px-4 py-2.5 font-medium">
                         <Link
                           href={`/recipes/${recipe.id}`}
                           className="underline decoration-[var(--line)] underline-offset-4"
@@ -138,13 +134,13 @@ export default async function RecipesPage() {
                           {recipe.name}
                         </Link>
                       </td>
-                      <td className="p-3 capitalize">
+                      <td className="px-4 py-2.5 capitalize">
                         {recipe.recipe_type.replace("_", " ")}
                       </td>
-                      <td className="p-3">
+                      <td className="px-4 py-2.5">
                         {activeVersion?.effective_from ?? "Draft only"}
                       </td>
-                      <td className="p-3 text-right tabular-nums">
+                      <td className="px-4 py-2.5 text-right tabular-nums">
                         {(
                           costs.find((row) => row.id === recipe.id)?.cost ?? 0
                         ).toLocaleString("en-US", {
@@ -159,17 +155,15 @@ export default async function RecipesPage() {
             </table>
           </div>
         </section>
-      </div>
-    </div>
+      </PageBody>
+    </>
   );
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="border-b bg-[var(--surface)] p-5 sm:border-r sm:last:border-r-0">
-      <p className="font-mono text-[10px] tracking-[0.14em] text-[var(--muted)] uppercase">
-        {label}
-      </p>
+      <p className="text-xs font-medium text-[var(--muted)]">{label}</p>
       <p className="mt-3 text-2xl font-semibold tracking-[-0.035em]">{value}</p>
     </div>
   );

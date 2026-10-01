@@ -7,6 +7,8 @@ import {
   getPrimaryLocation,
 } from "@/lib/inventory/queries";
 import { createClient } from "@/lib/supabase/server";
+import { SectionNav } from "@/components/layout/section-nav";
+import { PageBody, PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Exceptions" };
 
@@ -139,19 +141,13 @@ export default async function ExceptionsPage() {
   ];
 
   return (
-    <div className="px-5 py-8 sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-5xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
-          Exceptions
-        </p>
-        <h1 className="mt-2 text-4xl font-semibold tracking-[-0.045em]">
-          Uncertainty belongs in the open.
-        </h1>
-        <p className="mt-4 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-          Blocking issues stay visible before they distort a period close or a
-          financial result.
-        </p>
-
+    <>
+      <PageHeader
+        title="Exceptions"
+        description="Issues that block or distort a period close"
+      />
+      <SectionNav section="exceptions" active="/exceptions" />
+      <PageBody>
         <div className="mt-7 grid gap-4">
           {sections.map((section) => (
             <Link
@@ -204,7 +200,7 @@ export default async function ExceptionsPage() {
             </p>
           </div>
         )}
-      </div>
-    </div>
+      </PageBody>
+    </>
   );
 }

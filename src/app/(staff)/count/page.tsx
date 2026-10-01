@@ -67,7 +67,7 @@ export default async function CountPage() {
   return (
     <div className="px-4 py-6">
       <div className="mx-auto max-w-xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
+        <p className="text-xs font-medium text-[var(--accent-strong)]">
           Assigned count
         </p>
         <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em]">

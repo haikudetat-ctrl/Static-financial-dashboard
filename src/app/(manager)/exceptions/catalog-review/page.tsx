@@ -4,6 +4,8 @@ import { getUserContext } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
 import { closeCatalogReviewItemAction } from "./actions";
+import { SectionNav } from "@/components/layout/section-nav";
+import { PageBody, PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Catalog review" };
 
@@ -58,19 +60,18 @@ export default async function CatalogReviewPage() {
   const canResolve = context.role === "manager";
 
   return (
-    <div className="px-5 py-8 sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-5xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[#b77a22] uppercase">
-          Incomplete data
-        </p>
-        <h1 className="mt-2 text-4xl font-semibold tracking-[-0.045em]">
-          Catalog review.
-        </h1>
-        <p className="mt-4 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-          Everything the workbook import could not settle on its own. Resolve an
-          item once it is fixed, or dismiss it if it does not apply.
-        </p>
-
+    <>
+      <PageHeader
+        title="Catalog review"
+        description={
+          <>
+            Everything the workbook import could not settle on its own. Resolve
+            an item once it is fixed, or dismiss it if it does not apply.
+          </>
+        }
+      />
+      <SectionNav section="exceptions" active="/exceptions/catalog-review" />
+      <PageBody>
         {ISSUE_GROUPS.map((group) => {
           const rows = items.filter((item) => item.issue_type === group.type);
           if (rows.length === 0) return null;
@@ -144,7 +145,7 @@ export default async function CatalogReviewPage() {
             </p>
           </div>
         )}
-      </div>
-    </div>
+      </PageBody>
+    </>
   );
 }

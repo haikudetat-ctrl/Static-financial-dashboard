@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   CookingPot,
   FileInput,
+  FileText,
   GitCompare,
   PackageCheck,
   ReceiptText,
@@ -19,6 +20,7 @@ export type NavigationItem = {
   href: string;
   icon: LucideIcon;
   description: string;
+  group?: "Overview" | "Operations" | "Data";
 };
 
 export const managerNavigation: NavigationItem[] = [
@@ -26,49 +28,64 @@ export const managerNavigation: NavigationItem[] = [
     label: "Today",
     href: "/today",
     icon: Sparkles,
-    description: "Reviews, cutoffs, tasks, and material exceptions.",
+    description: "What needs attention and how the period is tracking.",
+    group: "Overview",
   },
   {
-    label: "Imports",
-    href: "/imports",
-    icon: FileInput,
-    description: "Upload and review source documents and extracts.",
-  },
-  {
-    label: "Mapping",
-    href: "/mapping",
-    icon: GitCompare,
-    description: "Map Toast items, vendor codes, and units to inventory.",
-  },
-  {
-    label: "Financial health",
+    label: "Financials",
     href: "/financial-health",
     icon: BarChart3,
-    description: "Sales, COGS, margin, labor, and prime cost.",
+    description: "Profit and loss, cost of goods, and menu profitability.",
+    group: "Overview",
+  },
+  {
+    label: "Inventory",
+    href: "/inventory",
+    icon: Boxes,
+    description: "On-hand value, counts, and variance.",
+    group: "Operations",
   },
   {
     label: "Purchasing",
     href: "/purchasing",
     icon: ShoppingBasket,
     description: "Suggested orders, purchase orders, and vendor activity.",
+    group: "Operations",
   },
   {
-    label: "Inventory",
-    href: "/inventory",
-    icon: Boxes,
-    description: "On-hand projection, counts, variance, and known loss.",
+    label: "Invoices",
+    href: "/invoices/upload",
+    icon: FileText,
+    description: "Vendor invoices, price changes, and approvals.",
+    group: "Operations",
   },
   {
     label: "Recipes",
     href: "/recipes",
     icon: ReceiptText,
     description: "Recipe versions, costs, yields, and menu mappings.",
+    group: "Operations",
+  },
+  {
+    label: "Imports",
+    href: "/imports",
+    icon: FileInput,
+    description: "Upload Toast exports and source documents.",
+    group: "Data",
+  },
+  {
+    label: "Mapping",
+    href: "/mapping",
+    icon: GitCompare,
+    description: "Map Toast items, vendor codes, and units to inventory.",
+    group: "Data",
   },
   {
     label: "Exceptions",
     href: "/exceptions",
     icon: AlertTriangle,
     description: "Blocking issues, incomplete data, and warnings.",
+    group: "Data",
   },
 ];
 
