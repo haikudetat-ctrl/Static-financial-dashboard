@@ -155,6 +155,7 @@ export default async function RecipesPage({
             value={withMissing}
             tone={withMissing > 0 ? "warning" : "good"}
             detail="Recipes with an uncosted ingredient"
+            href="/recipes/ingredients"
           />
           <StatTile
             label="Unmapped Toast items"

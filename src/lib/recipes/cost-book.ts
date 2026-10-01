@@ -36,8 +36,16 @@ export type CatalogItem = {
   unitType: string;
   baseUnitId: string;
   isProduced: boolean;
+  active: boolean;
+  category: string;
+  cogsClass: string | null;
+  countUnitId: string | null;
+  purchaseUnitId: string | null;
   outputRecipeId: string | null;
   standardCostSource: string | null;
+  standardCostUpdatedAt: string | null;
+  /** Last price paid, as invoiced. */
+  lastPurchase: { vendor: string; casePrice: number; pack: string } | null;
 };
 
 export type CatalogRecipe = {
@@ -99,7 +107,7 @@ export async function buildRecipeCatalog(
         supabase
           .from("inventory_items")
           .select(
-            "id, name, item_code, base_unit_id, is_produced, active, standard_unit_cost, standard_cost_source",
+            "id, name, item_code, base_unit_id, count_unit_id, purchase_unit_id, is_produced, active, cogs_class, standard_unit_cost, standard_cost_source, standard_cost_updated_at, inventory_categories(name)",
           )
           .eq("organization_id", organizationId)
           .order("name")
@@ -149,7 +157,7 @@ export async function buildRecipeCatalog(
         supabase
           .from("vendor_items")
           .select(
-            "inventory_item_id, last_case_price, base_quantity_per_purchase_unit, is_preferred, created_at",
+            "inventory_item_id, last_case_price, base_quantity_per_purchase_unit, is_preferred, created_at, pack_size, vendors(name)",
           )
           .eq("organization_id", organizationId)
           .not("inventory_item_id", "is", null)
@@ -220,6 +228,10 @@ export async function buildRecipeCatalog(
   }
 
   const vendorUnitCost = new Map<string, number>();
+  const lastPurchase = new Map<
+    string,
+    { vendor: string; casePrice: number; pack: string }
+  >();
   const vendorRank = new Map<string, string>();
   for (const vendorItem of vendorItems) {
     const perBase = Number(vendorItem.base_quantity_per_purchase_unit);
@@ -232,6 +244,14 @@ export async function buildRecipeCatalog(
       vendorItem.inventory_item_id,
       Number(vendorItem.last_case_price) / perBase,
     );
+    const vendor = Array.isArray(vendorItem.vendors)
+      ? vendorItem.vendors[0]
+      : vendorItem.vendors;
+    lastPurchase.set(vendorItem.inventory_item_id, {
+      vendor: (vendor as { name?: string } | null)?.name ?? "Vendor",
+      casePrice: Number(vendorItem.last_case_price),
+      pack: vendorItem.pack_size ?? "",
+    });
   }
 
   const catalogItems: CatalogItem[] = items.map((item) => ({
@@ -241,8 +261,19 @@ export async function buildRecipeCatalog(
     unitType: unitById.get(item.base_unit_id)?.unitType ?? "each",
     baseUnitId: item.base_unit_id,
     isProduced: item.is_produced,
+    active: item.active,
+    category:
+      (Array.isArray(item.inventory_categories)
+        ? item.inventory_categories[0]
+        : (item.inventory_categories as { name?: string } | null)
+      )?.name ?? "",
+    cogsClass: item.cogs_class,
+    countUnitId: item.count_unit_id,
+    purchaseUnitId: item.purchase_unit_id,
     outputRecipeId: outputRecipeByItem.get(item.id) ?? null,
     standardCostSource: item.standard_cost_source,
+    standardCostUpdatedAt: item.standard_cost_updated_at,
+    lastPurchase: lastPurchase.get(item.id) ?? null,
   }));
 
   const catalogRecipes: CatalogRecipe[] = recipes.map((recipe) => {

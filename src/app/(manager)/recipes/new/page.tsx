@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "New recipe" };
 export default async function NewRecipePage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string }>;
+  searchParams: Promise<{ type?: string; output?: string }>;
 }) {
   const context = await getUserContext();
   if (!context?.organizationId) return null;
@@ -23,21 +23,29 @@ export default async function NewRecipePage({
     context.locationId,
   );
   if (!locationId) return null;
-  const { type } = await searchParams;
+  const { type, output } = await searchParams;
   const catalog = await loadRecipeCatalog(context.organizationId, locationId);
   const recipeType =
     type === "batch" || type === "prep" ? type : ("menu_item" as const);
   const ml = catalog.units.find((unit) => unit.abbreviation === "ml");
+  // "Write recipe" from the ingredient list: the recipe fills that item.
+  const outputItem = output ? catalog.itemById.get(output) : undefined;
+  const outputBase = outputItem
+    ? catalog.units.find(
+        (unit) => unit.unitType === outputItem.unitType && unit.factor === 1,
+      )
+    : undefined;
 
   const recipe: EditorRecipe = {
     id: null,
-    name: "",
+    name: outputItem?.name ?? "",
     description: "",
     recipeType,
     menuPrice: null,
     outputQuantity: recipeType === "menu_item" ? 1 : 1000,
-    outputUnitId: recipeType === "menu_item" ? "" : (ml?.id ?? ""),
-    outputItemId: null,
+    outputUnitId:
+      recipeType === "menu_item" ? "" : (outputBase?.id ?? ml?.id ?? ""),
+    outputItemId: outputItem?.id ?? null,
     yieldIsApproximate: false,
     notes: "",
     versionNumber: null,
