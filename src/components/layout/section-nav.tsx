@@ -10,6 +10,7 @@ const SECTIONS = {
   ],
   recipes: [
     { label: "Recipes", href: "/recipes" },
+    { label: "Ingredients", href: "/recipes/ingredients" },
     { label: "Menu mappings", href: "/recipes/mappings" },
     { label: "Sales", href: "/recipes/sales" },
     { label: "Theoretical usage", href: "/recipes/theoretical-usage" },

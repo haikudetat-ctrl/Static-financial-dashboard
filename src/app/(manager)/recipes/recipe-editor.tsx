@@ -13,6 +13,7 @@ import {
   labelClass,
 } from "@/components/ui";
 import { COST_SOURCE_LABEL, type CostSource } from "@/lib/recipes/costing";
+import { DISPLAY_UNIT, SPEC_UNITS } from "@/lib/recipes/units";
 
 import {
   saveRecipeAction,
@@ -77,27 +78,6 @@ const TYPES = [
 
 /** The shared input style without its full width, for inline fields. */
 const compactInput = inputClass.replace("h-9 w-full ", "");
-
-/** Units a bartender would actually write in a spec. */
-const SPEC_UNITS = new Set([
-  "ml",
-  "fl oz",
-  "l",
-  "qt",
-  "gal",
-  "oz",
-  "lb",
-  "g",
-  "kg",
-  "ea",
-]);
-
-/** How a cost per base unit is shown for each kind of unit. */
-const DISPLAY_UNIT: Record<string, string> = {
-  volume: "fl oz",
-  weight: "oz",
-  each: "ea",
-};
 
 export function RecipeEditor({
   recipe,
@@ -268,7 +248,10 @@ export function RecipeEditor({
         })),
     };
     startSaving(async () => {
-      const result = await saveRecipeAction(input);
+      const result = await saveRecipeAction(input).catch(() => ({
+        ok: false as const,
+        error: "Couldn't save. Check your connection and try again.",
+      }));
       if (!result.ok) {
         setError(result.error);
         return;
@@ -867,7 +850,10 @@ function SetCost({
               ingredient.id,
               value,
               unitId,
-            );
+            ).catch(() => ({
+              ok: false as const,
+              error: "Couldn't save. Try again.",
+            }));
             if (!result.ok) {
               setError(result.error);
               return;
