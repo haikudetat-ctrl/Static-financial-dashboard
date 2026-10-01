@@ -1,190 +1,353 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
-import { getUserContext } from "@/lib/auth/session";
-import { getPrimaryLocation } from "@/lib/inventory/queries";
-import { getCogsForPeriod, getPeriods } from "@/lib/reporting/queries";
+import {
+  ButtonLink,
+  Callout,
+  PageBody,
+  Panel,
+  StatGrid,
+  StatTile,
+  TableScroll,
+  formatMoney,
+  formatPercent,
+  tableClass,
+  tdClass,
+  tdNumClass,
+  thClass,
+  thNumClass,
+} from "@/components/ui";
+import { rangeQuery } from "@/lib/reporting/period-range";
+import type { PnlLine, PnlStatement } from "@/lib/reporting/pnl";
+import { getProfitAndLoss } from "@/lib/reporting/queries";
 
-export const metadata: Metadata = { title: "Financial health" };
+import {
+  FinancialsHeader,
+  loadFinancialsContext,
+  type FinancialsSearchParams,
+} from "./financials-context";
 
-function fmt(amount: number) {
-  return amount.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-  });
-}
+export const metadata: Metadata = { title: "Profit & loss" };
 
-export default async function FinancialHealthPage() {
-  const context = await getUserContext();
-  if (!context?.organizationId) return null;
-  const locationId = await getPrimaryLocation(
-    context.organizationId,
-    context.locationId,
+export default async function ProfitAndLossPage({
+  searchParams,
+}: {
+  searchParams: FinancialsSearchParams;
+}) {
+  const loaded = await loadFinancialsContext(searchParams);
+  if (!loaded) return null;
+  const { locationId, periods, range } = loaded;
+  const pnl = await getProfitAndLoss(locationId, range.start, range.end);
+  const query = rangeQuery(range);
+  const { totals, pct } = pnl;
+  const hasSales = totals.sales !== 0;
+  const hasInventory = pnl.classCosts.some(
+    (c) => c.opening || c.purchases || c.closing,
   );
-  if (!locationId) return null;
-  const periods = await getPeriods(context.organizationId, locationId);
-  const latestClosed = periods.find((p) => p.status === "closed");
-  const latestPeriod = periods[0];
-  const cogs = latestClosed ? await getCogsForPeriod(latestClosed.id) : null;
-  const period = latestClosed ?? latestPeriod;
 
   return (
-    <div className="px-5 py-8 sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-6xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
-          Financial health
-        </p>
-        <div className="mt-2 flex flex-col justify-between gap-5 border-b pb-7 lg:flex-row lg:items-end">
-          <div>
-            <h1 className="text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
-              Every number should explain itself.
-            </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-              Actual and theoretical COGS, margin, labor, and prime cost,
-              traceable to the records that produced them.
-            </p>
-          </div>
-          {period && (
-            <Link
-              href={`/periods/${period.id}/readiness`}
-              className="text-sm underline underline-offset-4"
-            >
-              {period.status === "closed" ? "View close" : "Close readiness"} ·
-              {period.periodStart}–{period.periodEnd}
-            </Link>
-          )}
-        </div>
-
-        {!cogs ? (
-          <div className="mt-8 grid gap-6 lg:grid-cols-3">
-            <Signal
-              label="Net sales"
-              value={"\u2014"}
-              detail="Awaiting sales imports."
-              color="var(--muted)"
-            />
-            <Signal
-              label="Actual COGS"
-              value={"\u2014"}
-              detail="Close a period to see actual COGS."
-              color="var(--muted)"
-            />
-            <Signal
-              label="Prime cost"
-              value={"\u2014"}
-              detail="Awaiting sales and labor."
-              color="var(--muted)"
-            />
-          </div>
-        ) : (
+    <>
+      <FinancialsHeader
+        title="Profit & loss"
+        active="/financial-health"
+        range={range}
+        periods={periods}
+        actions={
           <>
-            <div className="mt-8 grid border-x sm:grid-cols-4">
-              <Metric label="Net sales" value={"\u2014"} />
-              <Metric label="Actual COGS" value={fmt(cogs.actualCogs)} />
-              <Metric
-                label="Theoretical COGS"
-                value={fmt(cogs.theoreticalCogs)}
-              />
-              <Metric
-                label="COGS variance"
-                value={`${fmt(Math.abs(cogs.varianceValue))} (${(cogs.variancePct ?? 0).toFixed(1)}%)`}
-                accent={
-                  cogs.variancePct !== null && Math.abs(cogs.variancePct) > 5
-                }
-              />
-            </div>
-            <div className="grid border-x sm:grid-cols-4">
-              <Metric label="Gross margin" value={"\u2014"} />
-              <Metric
-                label="Opening inventory"
-                value={fmt(cogs.openingValue)}
-              />
-              <Metric label="Purchases" value={fmt(cogs.purchasesValue)} />
-              <Metric
-                label="Closing inventory"
-                value={fmt(cogs.closingValue)}
-              />
-            </div>
-            <div className="mt-8 grid gap-px border bg-[var(--line)] sm:grid-cols-2">
-              <WorkspaceLink
-                href="/financial-health/menu-profitability"
-                title="Menu profitability"
-                detail="Per-item sales, cost, and contribution margin."
-              />
-              <WorkspaceLink
-                href="/periods/new"
-                title="New inventory period"
-                detail="Create a period for the next close cycle."
-              />
-            </div>
+            <ButtonLink href={`/financial-health/expenses?${query}`}>
+              Add expense
+            </ButtonLink>
+            {range.periodId && (
+              <ButtonLink
+                href={`/periods/${range.periodId}/readiness`}
+                variant="primary"
+              >
+                {range.status === "closed" ? "View close" : "Close period"}
+              </ButtonLink>
+            )}
           </>
+        }
+      />
+      <PageBody>
+        {!hasSales && (
+          <Callout
+            tone="neutral"
+            title="No sales posted for this range yet"
+            action={
+              <ButtonLink href="/imports" size="sm">
+                Upload Toast sales
+              </ButtonLink>
+            }
+          >
+            Upload each night&apos;s Toast export and post it to fill in
+            revenue.
+          </Callout>
         )}
-      </div>
-    </div>
+        {pnl.unclassifiedSales > 0 && (
+          <Callout
+            tone="warning"
+            title={`${formatMoney(pnl.unclassifiedSales)} of sales is unclassified`}
+            action={
+              <ButtonLink
+                href={`/financial-health/sales-categories?${query}`}
+                size="sm"
+              >
+                Classify sales
+              </ButtonLink>
+            }
+          >
+            Assign the Toast categories to an account so cost percentages by
+            class are accurate.
+          </Callout>
+        )}
+        {!hasInventory && (
+          <Callout tone="neutral" title="No inventory movements in this range">
+            Cost of goods fills in once the opening count posts and invoices are
+            received.
+          </Callout>
+        )}
+
+        <StatGrid>
+          <StatTile label="Net sales" value={formatMoney(totals.sales)} />
+          <StatTile
+            label="Cost of goods"
+            value={formatMoney(totals.cogs)}
+            detail={`${formatPercent(pct.cogs)} of sales · theoretical ${formatMoney(totals.theoreticalCogs)}`}
+          />
+          <StatTile
+            label="Prime cost"
+            value={formatPercent(pct.primeCost)}
+            detail={`${formatMoney(totals.primeCost)} cost of goods + labor`}
+          />
+          <StatTile
+            label="Net income"
+            value={formatMoney(totals.netIncome)}
+            detail={`${formatPercent(pct.netIncome)} of sales`}
+            tone={totals.netIncome < 0 ? "danger" : "neutral"}
+          />
+        </StatGrid>
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+          <Panel title="Statement" flush>
+            <Statement pnl={pnl} />
+          </Panel>
+          <div className="grid content-start gap-5">
+            <Panel
+              title="Cost of goods by class"
+              description="Actual cost from inventory against theoretical cost from recipes."
+              flush
+            >
+              <TableScroll>
+                <table className={tableClass}>
+                  <thead>
+                    <tr>
+                      <th className={thClass}>Class</th>
+                      <th className={thNumClass}>Sales</th>
+                      <th className={thNumClass}>Actual</th>
+                      <th className={thNumClass}>Theoretical</th>
+                      <th className={thNumClass}>Gap</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pnl.classCosts.map((c) => {
+                      const gap =
+                        c.costPct !== null && c.theoreticalPct !== null
+                          ? c.costPct - c.theoreticalPct
+                          : null;
+                      return (
+                        <tr key={c.cogsClass}>
+                          <td className={tdClass}>{c.label}</td>
+                          <td className={tdNumClass}>
+                            {formatMoney(c.sales, { cents: false })}
+                          </td>
+                          <td className={tdNumClass}>
+                            {formatPercent(c.costPct)}
+                          </td>
+                          <td className={tdNumClass}>
+                            {formatPercent(c.theoreticalPct)}
+                          </td>
+                          <td
+                            className={`${tdNumClass} ${
+                              gap !== null && gap > 0.02
+                                ? "font-semibold text-[var(--danger)]"
+                                : ""
+                            }`}
+                          >
+                            {gap === null
+                              ? "—"
+                              : `${gap > 0 ? "+" : ""}${(gap * 100).toFixed(1)} pts`}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </TableScroll>
+            </Panel>
+            <Panel
+              title="Inventory bridge"
+              description="Opening + purchases − closing = cost of goods."
+              flush
+            >
+              <TableScroll>
+                <table className={tableClass}>
+                  <thead>
+                    <tr>
+                      <th className={thClass}>Class</th>
+                      <th className={thNumClass}>Opening</th>
+                      <th className={thNumClass}>Purchases</th>
+                      <th className={thNumClass}>Closing</th>
+                      <th className={thNumClass}>COGS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pnl.classCosts.map((c) => (
+                      <tr key={c.cogsClass}>
+                        <td className={tdClass}>{c.label}</td>
+                        <td className={tdNumClass}>
+                          {formatMoney(c.opening, { cents: false })}
+                        </td>
+                        <td className={tdNumClass}>
+                          {formatMoney(c.purchases, { cents: false })}
+                        </td>
+                        <td className={tdNumClass}>
+                          {formatMoney(c.closing, { cents: false })}
+                        </td>
+                        <td className={`${tdNumClass} font-medium`}>
+                          {formatMoney(c.cost, { cents: false })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </TableScroll>
+            </Panel>
+          </div>
+        </div>
+      </PageBody>
+    </>
   );
 }
 
-function Metric({
+function Statement({ pnl }: { pnl: PnlStatement }) {
+  const { totals, pct } = pnl;
+  return (
+    <TableScroll>
+      <table className={tableClass}>
+        <thead>
+          <tr>
+            <th className={thClass}>Account</th>
+            <th className={thNumClass}>Amount</th>
+            <th className={thNumClass}>% of sales</th>
+          </tr>
+        </thead>
+        <tbody>
+          <Section title="Sales" lines={pnl.revenue} />
+          <Total label="Net sales" amount={totals.sales} pct={1} />
+          <Section title="Cost of goods sold" lines={pnl.cogs} />
+          <Total
+            label="Total cost of goods"
+            amount={totals.cogs}
+            pct={pct.cogs}
+          />
+          <Total
+            label="Gross profit"
+            amount={totals.grossProfit}
+            pct={pct.grossMargin}
+            strong
+          />
+          <Section title="Labor" lines={pnl.labor} />
+          <Total label="Total labor" amount={totals.labor} pct={pct.labor} />
+          <Total
+            label="Prime cost"
+            amount={totals.primeCost}
+            pct={pct.primeCost}
+            muted
+          />
+          <Section title="Operating expenses" lines={pnl.operatingExpenses} />
+          <Total
+            label="Operating income"
+            amount={totals.operatingIncome}
+            pct={pct.operatingIncome}
+            strong
+          />
+          <Section
+            title="Other income and expense"
+            lines={[...pnl.otherIncome, ...pnl.otherExpense]}
+          />
+          <Total
+            label="Net income"
+            amount={totals.netIncome}
+            pct={pct.netIncome}
+            strong
+          />
+        </tbody>
+      </table>
+    </TableScroll>
+  );
+}
+
+function Section({ title, lines }: { title: string; lines: PnlLine[] }) {
+  return (
+    <>
+      <tr>
+        <td
+          colSpan={3}
+          className="border-b bg-[var(--surface)] px-4 pt-3 pb-1.5 text-xs font-semibold text-[var(--muted)]"
+        >
+          {title}
+        </td>
+      </tr>
+      {lines.map((line) => (
+        <tr
+          key={line.accountId}
+          className={line.amount === 0 ? "text-[var(--muted)]" : ""}
+        >
+          <td className={`${tdClass} pl-6`}>
+            <span className="mr-2 font-mono text-xs text-[var(--muted)]">
+              {line.code}
+            </span>
+            {line.name}
+          </td>
+          <td className={tdNumClass}>{formatMoney(line.amount)}</td>
+          <td className={tdNumClass}>
+            {line.amount === 0 ? "" : formatPercent(line.pctOfSales)}
+          </td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
+function Total({
   label,
-  value,
-  accent,
+  amount,
+  pct,
+  strong,
+  muted,
 }: {
   label: string;
-  value: string;
-  accent?: boolean;
+  amount: number;
+  pct: number | null;
+  strong?: boolean;
+  muted?: boolean;
 }) {
   return (
-    <div
-      className={`border-b bg-[var(--surface)] p-5 sm:border-r sm:last:border-r-0 ${
-        accent ? "bg-[#fff4eb]" : ""
-      }`}
+    <tr
+      className={
+        strong
+          ? "bg-[var(--surface)] font-semibold"
+          : muted
+            ? "text-[var(--muted)] italic"
+            : "font-medium"
+      }
     >
-      <p className="font-mono text-[10px] tracking-[0.14em] text-[var(--muted)] uppercase">
-        {label}
-      </p>
-      <p className="mt-3 text-2xl font-semibold tracking-[-0.035em]">{value}</p>
-    </div>
-  );
-}
-
-function Signal({
-  label,
-  value,
-  detail,
-  color,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  color: string;
-}) {
-  return (
-    <div className="border bg-[var(--surface-strong)] p-6">
-      <p
-        className="font-mono text-[9px] tracking-[0.13em] uppercase"
-        style={{ color }}
+      <td className={tdClass}>{label}</td>
+      <td
+        className={`${tdNumClass} ${amount < 0 && strong ? "text-[var(--danger)]" : ""}`}
       >
-        {label}
-      </p>
-      <p className="mt-5 text-3xl font-semibold tracking-[-0.05em]">{value}</p>
-      <p className="mt-2 text-xs leading-5 text-[var(--muted)]">{detail}</p>
-    </div>
-  );
-}
-
-function WorkspaceLink({
-  href,
-  title,
-  detail,
-}: {
-  href: string;
-  title: string;
-  detail: string;
-}) {
-  return (
-    <Link href={href} className="bg-white p-5 hover:bg-[#f8f1ea]">
-      <h2 className="font-semibold">{title}</h2>
-      <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{detail}</p>
-    </Link>
+        {formatMoney(amount)}
+      </td>
+      <td className={tdNumClass}>{formatPercent(pct)}</td>
+    </tr>
   );
 }

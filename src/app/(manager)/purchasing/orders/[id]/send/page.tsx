@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { formatVendorOrder } from "@/lib/purchasing/calculations";
 import { getPurchaseOrderDetail, relatedName } from "@/lib/purchasing/queries";
 import { OrderClientActions } from "@/components/purchasing/order-client-actions";
+import { PageBody, PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Vendor order output" };
 
@@ -38,14 +39,12 @@ export default async function SendPurchaseOrderPage({
   });
 
   return (
-    <div className="px-5 py-8 sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-3xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
-          Vendor-ready output
-        </p>
-        <h1 className="mt-2 text-4xl font-semibold tracking-[-0.045em]">
-          Send {vendorName} a clean order.
-        </h1>
+    <>
+      <PageHeader
+        breadcrumbs={[{ label: "Purchasing", href: "/purchasing" }]}
+        title={`Send order to ${vendorName}`}
+      />
+      <PageBody narrow>
         <OrderClientActions
           output={output}
           orderId={order.id}
@@ -54,7 +53,7 @@ export default async function SendPurchaseOrderPage({
         <pre className="mt-7 overflow-x-auto border bg-white p-6 font-mono text-sm leading-7 whitespace-pre-wrap">
           {output}
         </pre>
-      </div>
-    </div>
+      </PageBody>
+    </>
   );
 }

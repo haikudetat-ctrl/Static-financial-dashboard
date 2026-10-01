@@ -7,6 +7,8 @@ import {
 } from "@/lib/inventory/queries";
 import { formatInventoryQuantity } from "@/lib/inventory/counts";
 import { createClient } from "@/lib/supabase/server";
+import { SectionNav } from "@/components/layout/section-nav";
+import { PageBody, PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Negative inventory" };
 
@@ -42,19 +44,16 @@ export default async function NegativeInventoryPage() {
   ]);
 
   return (
-    <div className="px-5 py-8 sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-5xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[#a63f2f] uppercase">
-          Blocking exception
-        </p>
-        <h1 className="mt-2 text-4xl font-semibold tracking-[-0.045em]">
-          Negative physical inventory.
-        </h1>
-        <p className="mt-4 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-          A physical negative blocks period close. Investigate missing receipts,
-          transaction timing, production errors, or a count posted to the wrong
-          zone.
-        </p>
+    <>
+      <PageHeader
+        title="Negative inventory"
+        description="Negative on-hand blocks period close. Look for missing receipts, timing, production errors, or a count posted to the wrong area."
+      />
+      <SectionNav
+        section="exceptions"
+        active="/exceptions/negative-inventory"
+      />
+      <PageBody>
         <div className="mt-7 grid gap-3">
           {rows.map((row) => (
             <article
@@ -86,7 +85,7 @@ export default async function NegativeInventoryPage() {
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </PageBody>
+    </>
   );
 }

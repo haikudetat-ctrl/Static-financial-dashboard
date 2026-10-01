@@ -27,7 +27,7 @@ export function OrderClientActions({
       </button>
       {status === "approved" && (
         <form action={markPurchaseOrderSentAction.bind(null, orderId)}>
-          <button className="min-h-12 bg-[var(--foreground)] px-6 text-sm font-semibold text-white">
+          <button className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--foreground)] bg-[var(--foreground)] px-3.5 text-sm font-medium text-white transition hover:bg-[#343a32] disabled:cursor-not-allowed disabled:opacity-50">
             Mark as sent
           </button>
         </form>

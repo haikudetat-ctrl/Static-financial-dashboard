@@ -8,6 +8,8 @@ export type ImportRegistration = {
   organizationId: string;
   locationId: string;
   parserVersion: string;
+  /** Business day a nightly POS export covers (YYYY-MM-DD), when known. */
+  businessDate?: string | null;
 };
 
 export type ImportResult = {
@@ -47,6 +49,7 @@ export async function registerImport(
       file_name: registration.fileName,
       file_path: registration.filePath,
       parser_version: registration.parserVersion,
+      business_date: registration.businessDate ?? null,
       status: "received",
     })
     .select("id")

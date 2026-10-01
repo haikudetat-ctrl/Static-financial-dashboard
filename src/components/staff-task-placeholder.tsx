@@ -13,16 +13,16 @@ export function StaffTaskPlaceholder({
 }) {
   return (
     <div className="mx-auto max-w-lg px-4 py-7">
-      <p className="font-mono text-[10px] tracking-[0.15em] text-[var(--accent)] uppercase">
+      <p className="text-xs font-medium text-[var(--accent-strong)]">
         Staff task
       </p>
-      <h1 className="mt-3 text-4xl leading-[0.98] font-semibold tracking-[-0.055em]">
+      <h1 className="mt-3 text-2xl font-semibold tracking-[-0.02em]">
         {title}
       </h1>
       <p className="mt-4 max-w-sm text-sm leading-6 text-[var(--muted)]">
         {description}
       </p>
-      <section className="mt-8 border bg-white p-6 shadow-[7px_7px_0_#dedbd2]">
+      <section className="mt-6 rounded-lg border bg-[var(--surface-strong)] p-6">
         <div className="grid size-12 place-items-center bg-[#f4e8de] text-[var(--accent)]">
           <Icon size={25} strokeWidth={1.5} aria-hidden="true" />
         </div>

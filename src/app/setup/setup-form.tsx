@@ -28,14 +28,14 @@ export function SetupForm() {
       action={action}
       className="grid gap-5 border bg-[var(--surface-strong)] p-6 sm:p-8"
     >
-      <label className="grid gap-2 text-sm font-semibold">
+      <label className="grid gap-1 text-xs font-medium">
         Organization name
         <input
           name="organization_name"
           type="text"
           required
           placeholder="e.g. The Bronze Door"
-          className="h-12 border bg-white px-3 text-base font-normal"
+          className="h-9 rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 text-sm font-normal text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
           aria-invalid={Boolean(state.errors?.organization_name)}
         />
         {state.errors?.organization_name && (
@@ -44,14 +44,14 @@ export function SetupForm() {
           </span>
         )}
       </label>
-      <label className="grid gap-2 text-sm font-semibold">
+      <label className="grid gap-1 text-xs font-medium">
         Location name
         <input
           name="location_name"
           type="text"
           required
           placeholder="e.g. Main Bar"
-          className="h-12 border bg-white px-3 text-base font-normal"
+          className="h-9 rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 text-sm font-normal text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
           aria-invalid={Boolean(state.errors?.location_name)}
         />
         {state.errors?.location_name && (

@@ -8,6 +8,7 @@ import { IMPORT_SOURCE_TYPES } from "@/lib/imports";
 import { getPrimaryLocation } from "@/lib/inventory/queries";
 import { getInvoices, relatedName } from "@/lib/purchasing/queries";
 import { createClient } from "@/lib/supabase/server";
+import { PageBody, PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Invoice review" };
 
@@ -59,14 +60,12 @@ export default async function InvoiceUploadPage() {
   ]);
 
   return (
-    <div className="px-5 py-8 sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-6xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
-          Purchasing · invoices
-        </p>
-        <h1 className="mt-2 text-4xl font-semibold tracking-[-0.045em]">
-          Review the bill before cost moves.
-        </h1>
+    <>
+      <PageHeader
+        title="Invoices"
+        description="Upload vendor invoices and review them before cost posts"
+      />
+      <PageBody>
         <div className="mt-7 grid gap-7 lg:grid-cols-[1fr_1.2fr]">
           <div className="grid content-start gap-5">
             <section className="border bg-[var(--surface)] p-5">
@@ -92,7 +91,7 @@ export default async function InvoiceUploadPage() {
               </h2>
               <select
                 name="source_import_id"
-                className="border bg-white px-3 py-3 text-sm"
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
               >
                 <option value="">Choose uploaded source document</option>
                 {(sourceImports ?? []).map((sourceImport) => (
@@ -104,7 +103,7 @@ export default async function InvoiceUploadPage() {
               <select
                 name="vendor_id"
                 required
-                className="border bg-white px-3 py-3 text-sm"
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
               >
                 <option value="">Choose vendor</option>
                 {(vendors ?? []).map((vendor) => (
@@ -117,30 +116,30 @@ export default async function InvoiceUploadPage() {
                 <input
                   name="invoice_number"
                   required
-                  className="border px-3 py-3 text-sm"
+                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                   placeholder="Invoice number"
                 />
                 <input
                   name="invoice_date"
                   required
                   type="date"
-                  className="border px-3 py-3 text-sm"
+                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                 />
               </div>
               <input
                 name="order_id"
-                className="border px-3 py-3 text-sm"
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                 placeholder="Vendor order / PO reference"
               />
               <input
                 name="document_file_path"
-                className="border px-3 py-3 text-sm"
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                 placeholder="Document path or upload reference"
               />
               <select
                 name="inventory_item_id"
                 required
-                className="border bg-white px-3 py-3 text-sm"
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
               >
                 <option value="">Map inventory item</option>
                 {(items ?? []).map((item) => (
@@ -151,7 +150,7 @@ export default async function InvoiceUploadPage() {
               </select>
               <select
                 name="receipt_line_id"
-                className="border bg-white px-3 py-3 text-sm"
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
               >
                 <option value="">No receipt match</option>
                 {(receiptLines ?? []).map((line) => (
@@ -165,18 +164,18 @@ export default async function InvoiceUploadPage() {
               </select>
               <input
                 name="vendor_product_code"
-                className="border px-3 py-3 text-sm"
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                 placeholder="Vendor product code"
               />
               <input
                 name="product_description"
                 required
-                className="border px-3 py-3 text-sm"
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                 placeholder="Product description"
               />
               <input
                 name="pack_size"
-                className="border px-3 py-3 text-sm"
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                 placeholder="Pack size"
               />
               <div className="grid grid-cols-3 gap-3">
@@ -186,7 +185,7 @@ export default async function InvoiceUploadPage() {
                   type="number"
                   min="0.001"
                   step="0.001"
-                  className="border px-3 py-3 text-sm"
+                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                   placeholder="Qty"
                 />
                 <input
@@ -195,7 +194,7 @@ export default async function InvoiceUploadPage() {
                   type="number"
                   min="0"
                   step="0.01"
-                  className="border px-3 py-3 text-sm"
+                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                   placeholder="Unit price"
                 />
                 <input
@@ -204,7 +203,7 @@ export default async function InvoiceUploadPage() {
                   type="number"
                   min="0"
                   step="0.01"
-                  className="border px-3 py-3 text-sm"
+                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                   placeholder="Line total"
                 />
               </div>
@@ -214,7 +213,7 @@ export default async function InvoiceUploadPage() {
                 type="number"
                 min="0"
                 step="0.01"
-                className="border px-3 py-3 text-sm"
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                 placeholder="Invoice total"
               />
               <div className="grid grid-cols-2 gap-3">
@@ -222,35 +221,35 @@ export default async function InvoiceUploadPage() {
                   name="discount_amount"
                   type="number"
                   step="0.01"
-                  className="border px-3 py-3 text-sm"
+                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                   placeholder="Discount"
                 />
                 <input
                   name="tax_amount"
                   type="number"
                   step="0.01"
-                  className="border px-3 py-3 text-sm"
+                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                   placeholder="Tax"
                 />
                 <input
                   name="freight_amount"
                   type="number"
                   step="0.01"
-                  className="border px-3 py-3 text-sm"
+                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                   placeholder="Freight"
                 />
                 <input
                   name="deposit_amount"
                   type="number"
                   step="0.01"
-                  className="border px-3 py-3 text-sm"
+                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                   placeholder="Deposit"
                 />
                 <input
                   name="credits_amount"
                   type="number"
                   step="0.01"
-                  className="border px-3 py-3 text-sm"
+                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                   placeholder="Credits"
                 />
               </div>
@@ -262,22 +261,24 @@ export default async function InvoiceUploadPage() {
 
           <section>
             <h2 className="text-lg font-semibold">Invoice register</h2>
-            <div className="mt-3 overflow-x-auto border">
+            <div className="mt-3 overflow-x-auto rounded-lg border bg-[var(--surface-strong)]">
               <table className="w-full min-w-[620px] text-sm">
-                <thead className="bg-[var(--foreground)] text-left font-mono text-[10px] tracking-[0.1em] text-white uppercase">
+                <thead className="border-b bg-[var(--surface)] text-left text-xs font-medium text-[var(--muted)]">
                   <tr>
-                    <th className="p-3">Vendor</th>
-                    <th className="p-3">Invoice</th>
-                    <th className="p-3">Date</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3 text-right">Total</th>
+                    <th className="px-4 py-2.5">Vendor</th>
+                    <th className="px-4 py-2.5">Invoice</th>
+                    <th className="px-4 py-2.5">Date</th>
+                    <th className="px-4 py-2.5">Status</th>
+                    <th className="px-4 py-2.5 text-right">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {invoices.map((invoice) => (
-                    <tr key={invoice.id} className="border-b bg-white">
-                      <td className="p-3">{relatedName(invoice.vendors)}</td>
-                      <td className="p-3 font-semibold">
+                    <tr key={invoice.id} className="border-b last:border-b-0">
+                      <td className="px-4 py-2.5">
+                        {relatedName(invoice.vendors)}
+                      </td>
+                      <td className="px-4 py-2.5 font-medium">
                         <Link
                           href={`/invoices/${invoice.id}/review`}
                           className="underline underline-offset-4"
@@ -285,9 +286,11 @@ export default async function InvoiceUploadPage() {
                           {invoice.invoice_number}
                         </Link>
                       </td>
-                      <td className="p-3">{invoice.invoice_date}</td>
-                      <td className="p-3 capitalize">{invoice.status}</td>
-                      <td className="p-3 text-right">
+                      <td className="px-4 py-2.5">{invoice.invoice_date}</td>
+                      <td className="px-4 py-2.5 capitalize">
+                        {invoice.status}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
                         ${Number(invoice.total_amount).toFixed(2)}
                       </td>
                     </tr>
@@ -297,7 +300,7 @@ export default async function InvoiceUploadPage() {
             </div>
           </section>
         </div>
-      </div>
-    </div>
+      </PageBody>
+    </>
   );
 }

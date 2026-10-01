@@ -5,7 +5,7 @@ import { signOutAction } from "@/app/auth/actions";
 export function AccessPending({ email }: { email: string }) {
   return (
     <main className="grid min-h-[100dvh] place-items-center px-5">
-      <section className="max-w-lg border bg-[var(--surface)] p-8 shadow-[8px_8px_0_#dedbd2]">
+      <section className="max-w-lg rounded-lg border bg-[var(--surface-strong)] p-8">
         <Clock3
           size={32}
           strokeWidth={1.5}
@@ -20,7 +20,7 @@ export function AccessPending({ email }: { email: string }) {
           role. Ask a manager to add this account.
         </p>
         <form action={signOutAction} className="mt-7">
-          <button className="min-h-11 bg-[var(--foreground)] px-5 text-sm font-semibold text-white">
+          <button className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--foreground)] bg-[var(--foreground)] px-3.5 text-sm font-medium text-white transition hover:bg-[#343a32] disabled:cursor-not-allowed disabled:opacity-50">
             Sign out
           </button>
         </form>

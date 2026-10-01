@@ -13,7 +13,7 @@ export default function RegisterPage() {
         <p className="mb-3 font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
           New account
         </p>
-        <h2 className="text-4xl font-semibold tracking-[-0.045em]">
+        <h2 className="text-2xl font-semibold tracking-[-0.02em]">
           Join your team.
         </h2>
         <p className="mt-3 text-sm leading-6 text-[var(--muted)]">

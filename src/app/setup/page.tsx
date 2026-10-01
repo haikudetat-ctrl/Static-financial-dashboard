@@ -18,10 +18,10 @@ export default async function SetupPage() {
     <main className="grid min-h-[100dvh] place-items-center px-5">
       <section className="w-full max-w-lg">
         <div className="mb-8">
-          <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
+          <p className="text-xs font-medium text-[var(--accent-strong)]">
             First time setup
           </p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-[-0.045em]">
+          <h1 className="mt-3 text-2xl font-semibold tracking-[-0.02em]">
             Name your bar.
           </h1>
           <p className="mt-4 text-sm leading-6 text-[var(--muted)]">

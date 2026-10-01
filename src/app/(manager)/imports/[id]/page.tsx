@@ -4,8 +4,7 @@ import { notFound } from "next/navigation";
 import { getUserContext } from "@/lib/auth/session";
 import { IMPORT_STATUS_LABELS } from "@/lib/imports";
 import { createClient } from "@/lib/supabase/server";
-import { ChevronLeft } from "lucide-react";
-import Link from "next/link";
+import { Badge, PageBody, PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Import detail" };
 
@@ -42,116 +41,111 @@ export default async function ImportDetailPage({
     .limit(100);
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] px-4 py-7 sm:px-7 lg:px-10 lg:py-10">
-      <Link
-        href="/imports"
-        className="mb-6 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--foreground)]"
-      >
-        <ChevronLeft size={14} strokeWidth={1.7} />
-        All imports
-      </Link>
-
-      <header className="border-b pb-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
-              {importRecord.source_type}
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em]">
-              {importRecord.file_name}
-            </h1>
-          </div>
-          <span
-            className={`shrink-0 rounded px-2.5 py-1 font-mono text-[10px] uppercase ${
-              importRecord.status === "posted"
-                ? "bg-[#edf4ee] text-[#3f6d55]"
-                : importRecord.status === "failed"
-                  ? "bg-[#f8e9e6] text-[#7e3025]"
-                  : "bg-[#eef0ec] text-[#62685f]"
-            }`}
-          >
-            {IMPORT_STATUS_LABELS[importRecord.status] ?? importRecord.status}
+    <>
+      <PageHeader
+        breadcrumbs={[{ label: "Imports", href: "/imports" }]}
+        title={importRecord.file_name}
+        description={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            {importRecord.source_type}
+            <Badge
+              tone={
+                importRecord.status === "posted"
+                  ? "good"
+                  : importRecord.status === "failed"
+                    ? "danger"
+                    : "neutral"
+              }
+            >
+              {IMPORT_STATUS_LABELS[importRecord.status] ?? importRecord.status}
+            </Badge>
           </span>
-        </div>
-      </header>
-
-      <section className="mt-6 grid gap-4 sm:grid-cols-3">
-        {[
-          { label: "Rows", value: String(importRecord.row_count) },
-          {
-            label: "Parser version",
-            value: importRecord.parser_version || "—",
-          },
-          {
-            label: "Uploaded",
-            value: new Date(importRecord.created_at).toLocaleDateString(),
-          },
-        ].map((stat) => (
-          <div key={stat.label} className="border px-4 py-3">
-            <p className="font-mono text-[9px] tracking-[0.13em] text-[var(--muted)] uppercase">
-              {stat.label}
-            </p>
-            <p className="mt-1 text-lg font-semibold">{stat.value}</p>
-          </div>
-        ))}
-      </section>
-
-      {/* Staged rows preview */}
-      <section className="mt-8">
-        <h2 className="text-lg font-semibold tracking-[-0.02em]">
-          Staged rows {rows ? `(${rows.length})` : ""}
-        </h2>
-
-        {!rows || rows.length === 0 ? (
-          <p className="mt-4 text-sm text-[var(--muted)]">
-            No rows staged yet. Extraction may still be in progress.
-          </p>
-        ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left font-mono text-[9px] tracking-[0.13em] text-[var(--muted)] uppercase">
-                  <th className="pr-4 pb-3 font-normal">#</th>
-                  <th className="pr-4 pb-3 font-normal">Status</th>
-                  <th className="pr-4 pb-3 font-normal">Raw data</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.slice(0, 50).map((row) => (
-                  <tr key={row.id} className="border-b">
-                    <td className="py-2 pr-4 font-mono text-xs text-[var(--muted)]">
-                      {row.row_index + 1}
-                    </td>
-                    <td className="py-2 pr-4">
-                      <span className="text-xs text-[var(--muted)]">
-                        {row.status}
-                      </span>
-                    </td>
-                    <td className="max-w-lg truncate py-2 pr-4 font-mono text-xs text-[var(--muted)]">
-                      {(() => {
-                        const normalized = row.normalized_data ?? {};
-                        const hasData = Object.values(normalized).some(
-                          (v) => v !== "" && v !== 0 && v !== false,
-                        );
-                        const obj = hasData ? normalized : (row.raw_data ?? {});
-                        const json = JSON.stringify(obj);
-                        return json.length > 250
-                          ? json.slice(0, 250) + "…"
-                          : json;
-                      })()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {rows.length > 50 && (
-              <p className="mt-3 text-xs text-[var(--muted)]">
-                Showing 50 of {rows.length} rows.
+        }
+      />
+      <PageBody>
+        <section className="mt-6 grid gap-4 sm:grid-cols-3">
+          {[
+            { label: "Rows", value: String(importRecord.row_count) },
+            {
+              label: "Parser version",
+              value: importRecord.parser_version || "—",
+            },
+            {
+              label: "Uploaded",
+              value: new Date(importRecord.created_at).toLocaleDateString(),
+            },
+          ].map((stat) => (
+            <div
+              key={stat.label}
+              className="rounded-lg border bg-[var(--surface-strong)] px-4 py-3"
+            >
+              <p className="text-xs font-medium text-[var(--muted)]">
+                {stat.label}
               </p>
-            )}
-          </div>
-        )}
-      </section>
-    </div>
+              <p className="mt-1 text-lg font-semibold">{stat.value}</p>
+            </div>
+          ))}
+        </section>
+
+        {/* Staged rows preview */}
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">
+            Staged rows {rows ? `(${rows.length})` : ""}
+          </h2>
+
+          {!rows || rows.length === 0 ? (
+            <p className="mt-4 text-sm text-[var(--muted)]">
+              No rows staged yet. Extraction may still be in progress.
+            </p>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left font-mono text-[9px] tracking-[0.13em] text-[var(--muted)] uppercase">
+                    <th className="px-4 py-2 font-medium">#</th>
+                    <th className="px-4 py-2 font-medium">Status</th>
+                    <th className="px-4 py-2 font-medium">Raw data</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.slice(0, 50).map((row) => (
+                    <tr key={row.id} className="border-b">
+                      <td className="py-2 pr-4 font-mono text-xs text-[var(--muted)]">
+                        {row.row_index + 1}
+                      </td>
+                      <td className="py-2 pr-4">
+                        <span className="text-xs text-[var(--muted)]">
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="max-w-lg truncate py-2 pr-4 font-mono text-xs text-[var(--muted)]">
+                        {(() => {
+                          const normalized = row.normalized_data ?? {};
+                          const hasData = Object.values(normalized).some(
+                            (v) => v !== "" && v !== 0 && v !== false,
+                          );
+                          const obj = hasData
+                            ? normalized
+                            : (row.raw_data ?? {});
+                          const json = JSON.stringify(obj);
+                          return json.length > 250
+                            ? json.slice(0, 250) + "…"
+                            : json;
+                        })()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {rows.length > 50 && (
+                <p className="mt-3 text-xs text-[var(--muted)]">
+                  Showing 50 of {rows.length} rows.
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+      </PageBody>
+    </>
   );
 }

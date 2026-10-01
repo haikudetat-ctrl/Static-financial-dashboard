@@ -6,6 +6,7 @@ import { getUserContext } from "@/lib/auth/session";
 import { getPrimaryLocation } from "@/lib/inventory/queries";
 import { getRecipeCurrentCost, getRecipeDetail } from "@/lib/recipes/queries";
 import { createClient } from "@/lib/supabase/server";
+import { PageBody, PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Recipe cost" };
 
@@ -93,32 +94,31 @@ export default async function RecipeCostPage({
     .sort((a, b) => b.lineCost - a.lineCost);
 
   return (
-    <div className="px-5 py-8 sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-4xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
-          Recipe cost · {detail.recipe.name}
-        </p>
-        <div className="mt-2 flex flex-col justify-between gap-4 border-b pb-6 sm:flex-row sm:items-end">
-          <div>
-            <h1 className="text-4xl font-semibold tracking-[-0.045em]">
-              Cost breakdown
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm text-[var(--muted)]">
-              Expanded to purchased ingredients at current WAC. Nested prep
-              recipes are flattened into base components.
-            </p>
-          </div>
-          <Link
-            href={`/recipes/${id}`}
-            className="text-sm underline underline-offset-4"
-          >
-            Back to recipe
-          </Link>
-        </div>
-
+    <>
+      <PageHeader
+        breadcrumbs={[{ label: "Recipes", href: "/recipes" }]}
+        title="Cost breakdown"
+        description={
+          <>
+            Expanded to purchased ingredients at current WAC. Nested prep
+            recipes are flattened into base components.
+          </>
+        }
+        actions={
+          <>
+            <Link
+              href={`/recipes/${id}`}
+              className="text-sm underline underline-offset-4"
+            >
+              Back to recipe
+            </Link>
+          </>
+        }
+      />
+      <PageBody narrow>
         <div className="mt-7 border bg-white p-6">
           <div className="flex items-end justify-between">
-            <p className="font-mono text-[10px] tracking-[0.13em] text-[var(--muted)] uppercase">
+            <p className="text-xs font-medium text-[var(--muted)]">
               Total cost per unit
             </p>
             <p className="text-3xl font-semibold tracking-[-0.04em]">
@@ -132,35 +132,35 @@ export default async function RecipeCostPage({
 
         <div className="mt-5 overflow-x-auto border">
           <table className="w-full min-w-[640px] text-sm">
-            <thead className="bg-[var(--foreground)] text-left font-mono text-[10px] tracking-[0.1em] text-white uppercase">
+            <thead className="border-b bg-[var(--surface)] text-left text-xs font-medium text-[var(--muted)]">
               <tr>
-                <th className="p-3">Ingredient</th>
-                <th className="p-3 text-right">Quantity (base)</th>
-                <th className="p-3 text-right">Unit cost</th>
-                <th className="p-3 text-right">Line cost</th>
-                <th className="p-3 text-right">% of total</th>
+                <th className="px-4 py-2.5">Ingredient</th>
+                <th className="px-4 py-2.5 text-right">Quantity (base)</th>
+                <th className="px-4 py-2.5 text-right">Unit cost</th>
+                <th className="px-4 py-2.5 text-right">Line cost</th>
+                <th className="px-4 py-2.5 text-right">% of total</th>
               </tr>
             </thead>
             <tbody>
               {costed.map((row) => (
-                <tr key={row.name} className="border-b bg-white">
-                  <td className="p-3 font-semibold">{row.name}</td>
-                  <td className="p-3 text-right tabular-nums">
+                <tr key={row.name} className="border-b last:border-b-0">
+                  <td className="px-4 py-2.5 font-medium">{row.name}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">
                     {row.quantityBase.toFixed(4)} {row.unit}
                   </td>
-                  <td className="p-3 text-right tabular-nums">
+                  <td className="px-4 py-2.5 text-right tabular-nums">
                     {row.unitCost.toLocaleString("en-US", {
                       style: "currency",
                       currency: "USD",
                     })}
                   </td>
-                  <td className="p-3 text-right tabular-nums">
+                  <td className="px-4 py-2.5 text-right tabular-nums">
                     {row.lineCost.toLocaleString("en-US", {
                       style: "currency",
                       currency: "USD",
                     })}
                   </td>
-                  <td className="p-3 text-right tabular-nums">
+                  <td className="px-4 py-2.5 text-right tabular-nums">
                     {row.pct.toFixed(1)}%
                   </td>
                 </tr>
@@ -169,7 +169,7 @@ export default async function RecipeCostPage({
                 <tr>
                   <td
                     colSpan={5}
-                    className="p-8 text-center text-[var(--muted)]"
+                    className="px-4 py-10 text-center text-sm text-[var(--muted)]"
                   >
                     No active recipe version has costable components.
                   </td>
@@ -200,7 +200,7 @@ export default async function RecipeCostPage({
             </div>
           </div>
         )}
-      </div>
-    </div>
+      </PageBody>
+    </>
   );
 }

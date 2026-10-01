@@ -14,7 +14,7 @@ export default function AuthLayout({
           <p className="mb-5 font-mono text-[11px] tracking-[0.16em] text-[#e5a36d] uppercase">
             Operational truth, one source
           </p>
-          <h1 className="max-w-lg text-5xl leading-[0.98] font-semibold tracking-[-0.055em]">
+          <h1 className="max-w-lg text-4xl leading-[1.05] font-semibold tracking-[-0.04em]">
             Know what the bar costs to run.
           </h1>
           <p className="mt-6 max-w-md text-base leading-7 text-[#c7cbc4]">

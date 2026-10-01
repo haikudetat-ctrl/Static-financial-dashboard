@@ -10,13 +10,13 @@ export function BrandMark({
   return (
     <Link
       href="/today"
-      className={`inline-flex items-center gap-3 ${
+      className={`inline-flex items-center gap-2.5 ${
         inverse ? "text-white" : "text-[var(--foreground)]"
       }`}
       aria-label="Static OS home"
     >
       <span
-        className={`grid size-9 grid-cols-2 gap-1 border p-1 ${
+        className={`grid size-8 grid-cols-2 gap-[3px] rounded-md border p-1 ${
           inverse
             ? "border-white bg-white"
             : "border-[var(--foreground)] bg-[var(--foreground)]"
@@ -32,15 +32,8 @@ export function BrandMark({
       </span>
       {!compact && (
         <span>
-          <span className="block text-[13px] font-semibold tracking-[-0.02em]">
-            STATIC OS
-          </span>
-          <span
-            className={`block font-mono text-[9px] tracking-[0.18em] uppercase ${
-              inverse ? "text-[#9ea49b]" : "text-[var(--muted)]"
-            }`}
-          >
-            Cost control
+          <span className="block text-sm font-semibold tracking-[-0.01em]">
+            Static OS
           </span>
         </span>
       )}

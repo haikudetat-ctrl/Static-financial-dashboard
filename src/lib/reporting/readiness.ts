@@ -73,24 +73,18 @@ export async function checkCloseReadiness(
         : `${unapprovedInvoices} invoice(s) still need approval.`,
   });
 
-  // 4. Every sold item has active recipe mapping
-  const { data: unmappedItems } = await supabase
+  // 4. Every sold item has active recipe mapping. Unmapped items post with
+  // no recipe, so they count toward sales but carry no theoretical cost.
+  const { data: unmappedSales } = await supabase
     .from("sales_items")
-    .select("item_guid")
-    .eq("organization_id", organizationId)
-    .eq("location_id", locationId)
-    .not(
-      "item_guid",
-      "in",
-      (
-        await supabase
-          .from("recipe_menu_item_mappings")
-          .select("external_item_guid")
-          .eq("organization_id", organizationId)
-          .eq("active", true)
-      ).data?.map((m) => m.external_item_guid) ?? [""],
-    )
-    .limit(1);
+    .select("item_guid, sales_business_days!inner(location_id, business_date)")
+    .is("recipe_id", null)
+    .eq("sales_business_days.location_id", locationId)
+    .gte("sales_business_days.business_date", period.period_start)
+    .lte("sales_business_days.business_date", period.period_end);
+  const unmappedItems = [
+    ...new Set((unmappedSales ?? []).map((item) => item.item_guid)),
+  ];
 
   checks.push({
     label: "All sold items mapped to recipes",

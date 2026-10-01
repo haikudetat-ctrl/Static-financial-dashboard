@@ -13,6 +13,7 @@ import {
   isMaterialVariance,
 } from "@/lib/inventory/counts";
 import { createClient } from "@/lib/supabase/server";
+import { PageBody, PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Count review" };
 
@@ -86,30 +87,29 @@ export default async function CountReviewPage({
   const approveAction = approveInventoryCountAction.bind(null, id);
 
   return (
-    <div className="px-5 py-8 sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-6xl">
-        <div className="flex flex-col justify-between gap-5 border-b pb-6 lg:flex-row lg:items-end">
-          <div>
-            <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
-              {count.count_type} count · {count.status.replace("_", " ")}
-            </p>
-            <h1 className="mt-2 text-4xl font-semibold tracking-[-0.045em]">
-              Review the physical truth.
-            </h1>
-            <p className="mt-3 text-sm text-[var(--muted)]">
-              Expected quantities are visible here only. Material variance is
-              highlighted at ±1 unit or ±$10.
-            </p>
-          </div>
-          {count.status === "counted" && (
-            <form action={approveAction}>
-              <button className="min-h-12 bg-[var(--foreground)] px-6 text-sm font-semibold text-white">
-                Approve and post
-              </button>
-            </form>
-          )}
-        </div>
-
+    <>
+      <PageHeader
+        breadcrumbs={[{ label: "Inventory", href: "/inventory" }]}
+        title={`Review ${count.count_type} count`}
+        description={
+          <>
+            Expected quantities are visible here only. Material variance is
+            highlighted at ±1 unit or ±$10.
+          </>
+        }
+        actions={
+          <>
+            {count.status === "counted" && (
+              <form action={approveAction}>
+                <button className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--foreground)] bg-[var(--foreground)] px-3.5 text-sm font-medium text-white transition hover:bg-[#343a32] disabled:cursor-not-allowed disabled:opacity-50">
+                  Approve and post
+                </button>
+              </form>
+            )}
+          </>
+        }
+      />
+      <PageBody>
         <div className="mt-7 grid gap-6">
           {[...(assignments ?? [])]
             .sort((left, right) => {
@@ -141,13 +141,15 @@ export default async function CountReviewPage({
                     <table className="w-full min-w-[760px] border-collapse text-sm">
                       <thead>
                         <tr className="border-y bg-white text-left font-mono text-[10px] tracking-[0.1em] text-[var(--muted)] uppercase">
-                          <th className="p-3">Item</th>
-                          <th className="p-3 text-right">Expected</th>
-                          <th className="p-3 text-right">Counted</th>
-                          <th className="p-3 text-right">Qty variance</th>
-                          <th className="p-3 text-right">WAC</th>
-                          <th className="p-3 text-right">$ variance</th>
-                          <th className="p-3">Action</th>
+                          <th className="px-4 py-2.5">Item</th>
+                          <th className="px-4 py-2.5 text-right">Expected</th>
+                          <th className="px-4 py-2.5 text-right">Counted</th>
+                          <th className="px-4 py-2.5 text-right">
+                            Qty variance
+                          </th>
+                          <th className="px-4 py-2.5 text-right">WAC</th>
+                          <th className="px-4 py-2.5 text-right">$ variance</th>
+                          <th className="px-4 py-2.5">Action</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -210,23 +212,23 @@ export default async function CountReviewPage({
                                 key={line.id}
                                 className={`border-b ${material ? "bg-[#fff4eb]" : "bg-white"}`}
                               >
-                                <td className="p-3 font-semibold">
+                                <td className="px-4 py-2.5 font-medium">
                                   {item?.name ?? "Inventory item"}
                                 </td>
-                                <td className="p-3 text-right tabular-nums">
+                                <td className="px-4 py-2.5 text-right tabular-nums">
                                   {formatInventoryQuantity(
                                     Number(line.expected_quantity),
                                   )}
                                 </td>
-                                <td className="p-3 text-right tabular-nums">
+                                <td className="px-4 py-2.5 text-right tabular-nums">
                                   {formatInventoryQuantity(counted)}
                                 </td>
-                                <td className="p-3 text-right tabular-nums">
+                                <td className="px-4 py-2.5 text-right tabular-nums">
                                   {formatInventoryQuantity(
                                     variance.quantityVariance,
                                   )}
                                 </td>
-                                <td className="p-3 text-right tabular-nums">
+                                <td className="px-4 py-2.5 text-right tabular-nums">
                                   {unitCost.toLocaleString("en-US", {
                                     style: "currency",
                                     currency: "USD",
@@ -235,7 +237,7 @@ export default async function CountReviewPage({
                                     per base unit
                                   </span>
                                 </td>
-                                <td className="p-3 text-right tabular-nums">
+                                <td className="px-4 py-2.5 text-right tabular-nums">
                                   {variance.valueVariance.toLocaleString(
                                     "en-US",
                                     {
@@ -244,7 +246,7 @@ export default async function CountReviewPage({
                                     },
                                   )}
                                 </td>
-                                <td className="p-3">
+                                <td className="px-4 py-2.5">
                                   <div className="flex gap-2">
                                     {line.approved_at ? (
                                       <span className="bg-[#e8f0eb] px-3 py-2 text-xs font-semibold text-[var(--success)]">
@@ -274,7 +276,7 @@ export default async function CountReviewPage({
               );
             })}
         </div>
-      </div>
-    </div>
+      </PageBody>
+    </>
   );
 }

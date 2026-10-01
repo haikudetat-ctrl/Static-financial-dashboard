@@ -15,6 +15,7 @@ import {
   getRecipeSetup,
   relatedName,
 } from "@/lib/recipes/queries";
+import { PageBody, PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Recipe detail" };
 
@@ -51,36 +52,33 @@ export default async function RecipeDetailPage({
   );
 
   return (
-    <div className="px-5 py-8 sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-6xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
-          Recipe · {detail.recipe.recipe_type.replace("_", " ")}
-        </p>
-        <div className="mt-2 flex flex-col justify-between gap-4 border-b pb-6 sm:flex-row sm:items-end">
-          <div>
-            <h1 className="text-4xl font-semibold tracking-[-0.045em]">
-              {detail.recipe.name}
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm text-[var(--muted)]">
-              {detail.recipe.description || "No recipe description."}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-2xl font-semibold">
-              {currentCost.cost.toLocaleString("en-US", {
-                style: "currency",
-                currency: "USD",
-              })}
-            </p>
-            <Link
-              href={`/recipes/${id}/cost`}
-              className="mt-1 block text-xs text-[var(--muted)] underline underline-offset-4"
-            >
-              Cost breakdown
-            </Link>
-          </div>
-        </div>
-
+    <>
+      <PageHeader
+        breadcrumbs={[{ label: "Recipes", href: "/recipes" }]}
+        title={detail.recipe.name}
+        description={
+          <>{detail.recipe.description || "No recipe description."}</>
+        }
+        actions={
+          <>
+            <div className="text-right">
+              <p className="text-2xl font-semibold">
+                {currentCost.cost.toLocaleString("en-US", {
+                  style: "currency",
+                  currency: "USD",
+                })}
+              </p>
+              <Link
+                href={`/recipes/${id}/cost`}
+                className="mt-1 block text-xs text-[var(--muted)] underline underline-offset-4"
+              >
+                Cost breakdown
+              </Link>
+            </div>
+          </>
+        }
+      />
+      <PageBody>
         <div className="mt-7 grid gap-6 lg:grid-cols-[1.5fr_1fr]">
           <section className="grid gap-5">
             {detail.versions.map((version) => {
@@ -91,7 +89,10 @@ export default async function RecipeDetailPage({
                 (component) => component.recipe_version_id === version.id,
               );
               return (
-                <article key={version.id} className="border bg-white">
+                <article
+                  key={version.id}
+                  className="rounded-lg border bg-[var(--surface-strong)]"
+                >
                   <header className="flex items-center justify-between border-b p-4">
                     <div>
                       <h2 className="font-semibold">
@@ -133,7 +134,7 @@ export default async function RecipeDetailPage({
                       )}
                       className="border-t p-4"
                     >
-                      <button className="min-h-11 bg-[var(--foreground)] px-5 text-sm font-semibold text-white">
+                      <button className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--foreground)] bg-[var(--foreground)] px-3.5 text-sm font-medium text-white transition hover:bg-[#343a32] disabled:cursor-not-allowed disabled:opacity-50">
                         Activate version
                       </button>
                     </form>
@@ -158,7 +159,7 @@ export default async function RecipeDetailPage({
                 </h2>
                 <select
                   name="component_type"
-                  className="border bg-white px-3 py-3 text-sm"
+                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                   defaultValue="inventory"
                 >
                   <option value="inventory">Inventory item</option>
@@ -167,7 +168,7 @@ export default async function RecipeDetailPage({
                 <select
                   name="component_id"
                   required
-                  className="border bg-white px-3 py-3 text-sm"
+                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                 >
                   <option value="">Choose component</option>
                   <optgroup label="Inventory">
@@ -193,13 +194,13 @@ export default async function RecipeDetailPage({
                   type="number"
                   min="0.000001"
                   step="0.000001"
-                  className="border px-3 py-3 text-sm"
+                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                   placeholder="Quantity"
                 />
                 <select
                   name="component_unit_id"
                   required
-                  className="border bg-white px-3 py-3 text-sm"
+                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                 >
                   <option value="">Unit</option>
                   {setup.units.map((unit) => (
@@ -223,7 +224,7 @@ export default async function RecipeDetailPage({
                 name="effective_from"
                 required
                 type="date"
-                className="border bg-white px-3 py-3 text-sm"
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
               />
               <input
                 name="output_quantity"
@@ -231,13 +232,13 @@ export default async function RecipeDetailPage({
                 type="number"
                 min="0.000001"
                 step="0.000001"
-                className="border bg-white px-3 py-3 text-sm"
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
                 placeholder="Output quantity"
               />
               <select
                 name="output_unit_id"
                 required
-                className="border bg-white px-3 py-3 text-sm"
+                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
               >
                 <option value="">Output unit</option>
                 {setup.units.map((unit) => (
@@ -252,7 +253,7 @@ export default async function RecipeDetailPage({
             </form>
           </aside>
         </div>
-      </div>
-    </div>
+      </PageBody>
+    </>
   );
 }

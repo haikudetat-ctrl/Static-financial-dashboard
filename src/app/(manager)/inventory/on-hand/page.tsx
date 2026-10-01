@@ -4,6 +4,8 @@ import { getUserContext } from "@/lib/auth/session";
 import { getOnHand, getPrimaryLocation } from "@/lib/inventory/queries";
 import { formatInventoryQuantity } from "@/lib/inventory/counts";
 import { createClient } from "@/lib/supabase/server";
+import { SectionNav } from "@/components/layout/section-nav";
+import { PageBody, PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "On hand" };
 
@@ -51,38 +53,37 @@ export default async function OnHandPage() {
     : { data: [] };
 
   return (
-    <div className="px-5 py-8 sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-6xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
-          Inventory projection
-        </p>
-        <div className="mt-2 flex flex-col justify-between gap-4 border-b pb-6 sm:flex-row sm:items-end">
-          <div>
-            <h1 className="text-4xl font-semibold tracking-[-0.045em]">
-              On hand, from posted movements.
-            </h1>
-            <p className="mt-3 text-sm text-[var(--muted)]">
-              Last verified:{" "}
-              {verified?.approved_at
-                ? new Date(verified.approved_at).toLocaleString()
-                : "No approved count"}
+    <>
+      <PageHeader
+        title="On hand"
+        description={
+          <>
+            Last verified:{" "}
+            {verified?.approved_at
+              ? new Date(verified.approved_at).toLocaleString()
+              : "No approved count"}
+          </>
+        }
+        actions={
+          <>
+            <p className="font-mono text-xs text-[var(--muted)]">
+              {rows.length} item-location rows
             </p>
-          </div>
-          <p className="font-mono text-xs text-[var(--muted)]">
-            {rows.length} item-location rows
-          </p>
-        </div>
-
-        <div className="mt-7 overflow-x-auto border">
+          </>
+        }
+      />
+      <SectionNav section="inventory" active="/inventory/on-hand" />
+      <PageBody>
+        <div className="mt-5 overflow-x-auto rounded-lg border bg-[var(--surface-strong)]">
           <table className="w-full min-w-[760px] border-collapse text-sm">
-            <thead className="bg-[var(--foreground)] text-left font-mono text-[10px] tracking-[0.1em] text-white uppercase">
+            <thead className="border-b bg-[var(--surface)] text-left text-xs font-medium text-[var(--muted)]">
               <tr>
-                <th className="p-3">Item</th>
-                <th className="p-3">Storage</th>
-                <th className="p-3 text-right">Quantity</th>
-                <th className="p-3 text-right">Unit cost</th>
-                <th className="p-3 text-right">Value</th>
-                <th className="p-3">Last movement</th>
+                <th className="px-4 py-2.5">Item</th>
+                <th className="px-4 py-2.5">Storage</th>
+                <th className="px-4 py-2.5 text-right">Quantity</th>
+                <th className="px-4 py-2.5 text-right">Unit cost</th>
+                <th className="px-4 py-2.5 text-right">Value</th>
+                <th className="px-4 py-2.5">Last movement</th>
               </tr>
             </thead>
             <tbody>
@@ -99,23 +100,25 @@ export default async function OnHandPage() {
                 return (
                   <tr
                     key={`${row.inventory_item_id}:${row.storage_location_id}`}
-                    className="border-b bg-white"
+                    className="border-b last:border-b-0"
                   >
-                    <td className="p-3 font-semibold">
+                    <td className="px-4 py-2.5 font-medium">
                       {item?.name ?? "Inventory item"}
                     </td>
-                    <td className="p-3">{location?.name ?? "Storage"}</td>
-                    <td className="p-3 text-right tabular-nums">
+                    <td className="px-4 py-2.5">
+                      {location?.name ?? "Storage"}
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">
                       {formatInventoryQuantity(Number(row.quantity))}{" "}
                       {unit?.abbreviation}
                     </td>
-                    <td className="p-3 text-right tabular-nums">
+                    <td className="px-4 py-2.5 text-right tabular-nums">
                       {Number(row.weighted_average_cost).toLocaleString(
                         "en-US",
                         { style: "currency", currency: "USD" },
                       )}
                     </td>
-                    <td className="p-3 text-right tabular-nums">
+                    <td className="px-4 py-2.5 text-right tabular-nums">
                       {Number(row.extended_value).toLocaleString("en-US", {
                         style: "currency",
                         currency: "USD",
@@ -131,7 +134,7 @@ export default async function OnHandPage() {
                 <tr>
                   <td
                     colSpan={6}
-                    className="p-8 text-center text-[var(--muted)]"
+                    className="px-4 py-10 text-center text-sm text-[var(--muted)]"
                   >
                     Approve the first full count to establish opening inventory.
                   </td>
@@ -140,7 +143,7 @@ export default async function OnHandPage() {
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
+      </PageBody>
+    </>
   );
 }

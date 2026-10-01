@@ -4,6 +4,8 @@ import { resolveAndPostReceiptAction } from "@/app/(staff)/receive/actions";
 import { getUserContext } from "@/lib/auth/session";
 import { getPrimaryLocation } from "@/lib/inventory/queries";
 import { getReceiptReviewQueue, relatedName } from "@/lib/purchasing/queries";
+import { SectionNav } from "@/components/layout/section-nav";
+import { PageBody, PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Receiving review" };
 
@@ -21,14 +23,13 @@ export default async function ReceivingReviewPage() {
   );
 
   return (
-    <div className="px-5 py-8 sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-4xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
-          Purchasing · receiving review
-        </p>
-        <h1 className="mt-2 text-4xl font-semibold tracking-[-0.045em]">
-          Resolve before stock moves.
-        </h1>
+    <>
+      <PageHeader
+        title="Receiving review"
+        description="Shortages, substitutions, damage and unknown items to resolve before stock moves"
+      />
+      <SectionNav section="purchasing" active="/receiving/review" />
+      <PageBody narrow>
         <div className="mt-7 grid gap-5">
           {receipts.map((receipt) => (
             <section key={receipt.id} className="border bg-white p-5">
@@ -44,7 +45,7 @@ export default async function ReceivingReviewPage() {
                 <form
                   action={resolveAndPostReceiptAction.bind(null, receipt.id)}
                 >
-                  <button className="min-h-11 bg-[var(--foreground)] px-5 text-sm font-semibold text-white">
+                  <button className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--foreground)] bg-[var(--foreground)] px-3.5 text-sm font-medium text-white transition hover:bg-[#343a32] disabled:cursor-not-allowed disabled:opacity-50">
                     Resolve and post
                   </button>
                 </form>
@@ -67,7 +68,7 @@ export default async function ReceivingReviewPage() {
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </PageBody>
+    </>
   );
 }

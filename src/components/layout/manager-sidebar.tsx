@@ -8,6 +8,75 @@ import { signOutAction } from "@/app/auth/actions";
 import { BrandMark } from "@/components/brand-mark";
 import { managerNavigation } from "@/lib/navigation";
 
+const groups = ["Overview", "Operations", "Data"] as const;
+
+export function ManagerNavList({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = usePathname();
+
+  return (
+    <nav className="grid gap-5" aria-label="Manager navigation">
+      {groups.map((group) => (
+        <div key={group}>
+          <p className="px-2.5 pb-1.5 text-[11px] font-medium text-[var(--muted)]">
+            {group}
+          </p>
+          <div className="grid gap-0.5">
+            {managerNavigation
+              .filter((item) => item.group === group)
+              .map((item) => {
+                const section = item.href.split("/")[1];
+                const active =
+                  pathname === item.href ||
+                  pathname.startsWith(`/${section}/`) ||
+                  pathname === `/${section}`;
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={onNavigate}
+                    aria-current={active ? "page" : undefined}
+                    className={`flex h-9 items-center gap-2.5 rounded-md px-2.5 text-sm transition ${
+                      active
+                        ? "bg-[var(--surface-strong)] font-semibold text-[var(--foreground)] shadow-[0_1px_0_var(--line-strong)]"
+                        : "text-[#585e56] hover:bg-white/60 hover:text-[var(--foreground)]"
+                    }`}
+                  >
+                    <Icon
+                      size={16}
+                      strokeWidth={1.8}
+                      aria-hidden="true"
+                      className={active ? "text-[var(--accent)]" : ""}
+                    />
+                    {item.label}
+                  </Link>
+                );
+              })}
+          </div>
+        </div>
+      ))}
+    </nav>
+  );
+}
+
+export function AccountFooter({ email }: { email: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2 border-t pt-3">
+      <p className="min-w-0 truncate text-xs text-[var(--muted)]">{email}</p>
+      <form action={signOutAction}>
+        <button
+          type="submit"
+          className="inline-flex size-8 items-center justify-center rounded-md text-[var(--muted)] transition hover:bg-white/60 hover:text-[var(--foreground)]"
+          aria-label="Sign out"
+          title="Sign out"
+        >
+          <LogOut size={15} strokeWidth={1.8} aria-hidden="true" />
+        </button>
+      </form>
+    </div>
+  );
+}
+
 export function ManagerSidebar({
   organization,
   email,
@@ -15,53 +84,21 @@ export function ManagerSidebar({
   organization: string | null;
   email: string;
 }) {
-  const pathname = usePathname();
-
   return (
-    <aside className="sticky top-0 hidden h-[100dvh] w-[256px] shrink-0 border-r bg-[#e9e6de] p-5 lg:flex lg:flex-col">
-      <BrandMark />
-      <div className="mt-10 border-y py-4">
-        <p className="font-mono text-[9px] tracking-[0.14em] text-[var(--muted)] uppercase">
-          Organization
-        </p>
-        <p className="mt-1 truncate text-sm font-semibold">
+    <aside className="sticky top-0 hidden h-[100dvh] w-[232px] shrink-0 flex-col gap-5 border-r bg-[var(--sidebar)] px-3 py-4 lg:flex">
+      <div className="px-1">
+        <BrandMark />
+      </div>
+      <div className="rounded-md border bg-[var(--surface)] px-2.5 py-2">
+        <p className="truncate text-sm font-semibold">
           {organization ?? "Workspace pending"}
         </p>
+        <p className="text-[11px] text-[var(--muted)]">Manager</p>
       </div>
-      <nav className="mt-5 grid gap-1" aria-label="Manager navigation">
-        {managerNavigation.map((item) => {
-          const active =
-            pathname === item.href || pathname.startsWith(`${item.href}/`);
-          const Icon = item.icon;
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`group grid min-h-11 grid-cols-[20px_1fr] items-center gap-3 border-l-2 px-3 text-sm transition active:translate-y-px ${
-                active
-                  ? "border-[var(--accent)] bg-[var(--surface)] font-semibold text-[var(--foreground)]"
-                  : "border-transparent text-[#62685f] hover:bg-white/55 hover:text-[var(--foreground)]"
-              }`}
-            >
-              <Icon size={18} strokeWidth={1.7} aria-hidden="true" />
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-      <div className="mt-auto border-t pt-4">
-        <p className="truncate text-xs font-medium">{email}</p>
-        <form action={signOutAction}>
-          <button
-            type="submit"
-            className="mt-3 inline-flex min-h-10 w-full items-center gap-2 text-left text-xs font-semibold text-[var(--muted)] transition hover:text-[var(--foreground)] active:translate-y-px"
-          >
-            <LogOut size={15} strokeWidth={1.7} aria-hidden="true" />
-            Sign out
-          </button>
-        </form>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <ManagerNavList />
       </div>
+      <AccountFooter email={email} />
     </aside>
   );
 }

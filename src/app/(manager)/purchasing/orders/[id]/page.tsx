@@ -7,6 +7,7 @@ import {
   cancelPurchaseOrderAction,
 } from "@/app/(manager)/purchasing/actions";
 import { getPurchaseOrderDetail, relatedName } from "@/lib/purchasing/queries";
+import { Badge, PageBody, PageHeader, buttonClass } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Purchase order" };
 
@@ -25,25 +26,22 @@ export default async function PurchaseOrderPage({
   );
 
   return (
-    <div className="px-5 py-8 sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-5xl">
-        <p className="font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
-          Purchase order · {order.status.replace("_", " ")}
-        </p>
-        <div className="mt-2 flex flex-col justify-between gap-5 border-b pb-6 sm:flex-row sm:items-end">
-          <div>
-            <h1 className="text-4xl font-semibold tracking-[-0.045em]">
-              {relatedName(order.vendors)}
-            </h1>
-            <p className="mt-3 text-sm text-[var(--muted)]">
-              Ordered {order.order_date} · delivery{" "}
-              {order.expected_delivery_date ?? "not scheduled"}
-            </p>
-          </div>
-          <div className="flex gap-2">
+    <>
+      <PageHeader
+        breadcrumbs={[{ label: "Purchasing", href: "/purchasing" }]}
+        title={relatedName(order.vendors)}
+        description={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            Ordered {order.order_date} · delivery{" "}
+            {order.expected_delivery_date ?? "not scheduled"}
+            <Badge>{order.status.replace("_", " ")}</Badge>
+          </span>
+        }
+        actions={
+          <>
             {order.status === "draft" && (
               <form action={approvePurchaseOrderAction.bind(null, order.id)}>
-                <button className="min-h-11 bg-[var(--foreground)] px-5 text-sm font-semibold text-white">
+                <button className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--foreground)] bg-[var(--foreground)] px-3.5 text-sm font-medium text-white transition hover:bg-[#343a32] disabled:cursor-not-allowed disabled:opacity-50">
                   Approve PO
                 </button>
               </form>
@@ -51,42 +49,44 @@ export default async function PurchaseOrderPage({
             {order.status === "approved" && (
               <Link
                 href={`/purchasing/orders/${order.id}/send`}
-                className="inline-flex min-h-11 items-center border px-5 text-sm font-semibold"
+                className={buttonClass()}
               >
                 Vendor output
               </Link>
             )}
-          </div>
-        </div>
-        <div className="mt-7 overflow-x-auto border">
+          </>
+        }
+      />
+      <PageBody>
+        <div className="mt-5 overflow-x-auto rounded-lg border bg-[var(--surface-strong)]">
           <table className="w-full min-w-[720px] text-sm">
-            <thead className="bg-[var(--foreground)] text-left font-mono text-[10px] tracking-[0.1em] text-white uppercase">
+            <thead className="border-b bg-[var(--surface)] text-left text-xs font-medium text-[var(--muted)]">
               <tr>
-                <th className="p-3">Item</th>
-                <th className="p-3">Pack</th>
-                <th className="p-3 text-right">Ordered</th>
-                <th className="p-3 text-right">Received</th>
-                <th className="p-3 text-right">Unit price</th>
-                <th className="p-3 text-right">Extended</th>
+                <th className="px-4 py-2.5">Item</th>
+                <th className="px-4 py-2.5">Pack</th>
+                <th className="px-4 py-2.5 text-right">Ordered</th>
+                <th className="px-4 py-2.5 text-right">Received</th>
+                <th className="px-4 py-2.5 text-right">Unit price</th>
+                <th className="px-4 py-2.5 text-right">Extended</th>
               </tr>
             </thead>
             <tbody>
               {order.lines.map((line) => (
-                <tr key={line.id} className="border-b bg-white">
-                  <td className="p-3 font-semibold">
+                <tr key={line.id} className="border-b last:border-b-0">
+                  <td className="px-4 py-2.5 font-medium">
                     {relatedName(line.inventory_items)}
                   </td>
-                  <td className="p-3">{line.pack_size}</td>
-                  <td className="p-3 text-right">
+                  <td className="px-4 py-2.5">{line.pack_size}</td>
+                  <td className="px-4 py-2.5 text-right">
                     {Number(line.quantity_ordered)}
                   </td>
-                  <td className="p-3 text-right">
+                  <td className="px-4 py-2.5 text-right">
                     {Number(line.quantity_received)}
                   </td>
-                  <td className="p-3 text-right">
+                  <td className="px-4 py-2.5 text-right">
                     ${Number(line.unit_price).toFixed(2)}
                   </td>
-                  <td className="p-3 text-right">
+                  <td className="px-4 py-2.5 text-right">
                     $
                     {(
                       Number(line.quantity_ordered) * Number(line.unit_price)
@@ -97,10 +97,10 @@ export default async function PurchaseOrderPage({
             </tbody>
             <tfoot>
               <tr className="bg-[var(--surface)] font-semibold">
-                <td colSpan={5} className="p-3 text-right">
+                <td colSpan={5} className="px-4 py-2.5 text-right">
                   Total
                 </td>
-                <td className="p-3 text-right">${total.toFixed(2)}</td>
+                <td className="px-4 py-2.5 text-right">${total.toFixed(2)}</td>
               </tr>
             </tfoot>
           </table>
@@ -120,7 +120,7 @@ export default async function PurchaseOrderPage({
             </button>
           </form>
         )}
-      </div>
-    </div>
+      </PageBody>
+    </>
   );
 }

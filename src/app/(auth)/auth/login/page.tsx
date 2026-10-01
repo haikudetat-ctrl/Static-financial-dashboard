@@ -19,7 +19,7 @@ export default async function LoginPage({
         <p className="mb-3 font-mono text-[10px] tracking-[0.16em] text-[var(--accent)] uppercase">
           Welcome back
         </p>
-        <h2 className="text-4xl font-semibold tracking-[-0.045em]">
+        <h2 className="text-2xl font-semibold tracking-[-0.02em]">
           Sign in to the shift.
         </h2>
         <p className="mt-3 text-sm leading-6 text-[var(--muted)]">

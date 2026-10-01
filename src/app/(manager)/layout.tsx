@@ -37,7 +37,10 @@ export default async function ManagerLayout({
         email={context.user.email ?? "Signed in"}
       />
       <div className="min-w-0 flex-1">
-        <MobileManagerNav />
+        <MobileManagerNav
+          organization={context.organization}
+          email={context.user.email ?? "Signed in"}
+        />
         <main>{children}</main>
       </div>
     </div>
