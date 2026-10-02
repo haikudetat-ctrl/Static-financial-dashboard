@@ -1,12 +1,31 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { approveInvoiceAction } from "@/app/(manager)/invoices/actions";
+import {
+  Badge,
+  Callout,
+  PageBody,
+  PageHeader,
+  Panel,
+  TableScroll,
+  formatMoney,
+  tableClass,
+  tdClass,
+  tdNumClass,
+  thClass,
+  thNumClass,
+} from "@/components/ui";
+import { getUserContext } from "@/lib/auth/session";
 import { getInvoiceDetail, relatedName } from "@/lib/purchasing/queries";
+import { getPeriods } from "@/lib/reporting/queries";
+import { formatPeriodLabel } from "@/lib/reporting/period-range";
+import { createClient } from "@/lib/supabase/server";
 import { getSignedDocumentUrl } from "@/lib/supabase/storage";
-import { PageBody, PageHeader } from "@/components/ui";
 
-export const metadata: Metadata = { title: "Invoice detail" };
+import { InvoiceDateInput } from "../../upload/invoice-controls";
+import { ApproveInvoiceButton, LineMatch } from "./review-controls";
+
+export const metadata: Metadata = { title: "Invoice" };
 
 export default async function InvoiceReviewPage({
   params,
@@ -14,114 +33,215 @@ export default async function InvoiceReviewPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const context = await getUserContext();
+  if (!context?.organizationId) notFound();
   const invoice = await getInvoiceDetail(id);
   if (!invoice) notFound();
-  const signedUrl = invoice.document_file_path
-    ? await getSignedDocumentUrl(invoice.document_file_path)
-    : null;
+  const supabase = await createClient();
+  const [signedUrl, periods, { data: items }] = await Promise.all([
+    invoice.document_file_path &&
+    !invoice.document_file_path.startsWith("/mnt/")
+      ? getSignedDocumentUrl(invoice.document_file_path)
+      : Promise.resolve(null),
+    getPeriods(context.organizationId, invoice.location_id),
+    supabase
+      .from("inventory_items")
+      .select("id, name, item_code")
+      .eq("organization_id", context.organizationId)
+      .eq("active", true)
+      .order("name")
+      .limit(2000),
+  ]);
+
+  const posted = invoice.status === "posted";
+  const editable = !posted && invoice.status !== "rejected";
+  const undated = invoice.invoice_date < "2000-01-01";
+  const unmatched = invoice.lines.filter(
+    (line) => !line.inventory_item_id,
+  ).length;
+  const period = periods.find(
+    (candidate) =>
+      candidate.status !== "closed" &&
+      candidate.periodStart <= invoice.invoice_date &&
+      invoice.invoice_date <= candidate.periodEnd,
+  );
+  const linesTotal = invoice.lines.reduce(
+    (sum, line) => sum + Number(line.line_total),
+    0,
+  );
+  const itemOptions = (items ?? []).map((item) => ({
+    id: item.id,
+    name: item.name,
+    code: item.item_code,
+  }));
 
   return (
     <>
       <PageHeader
         breadcrumbs={[{ label: "Invoices", href: "/invoices/upload" }]}
-        title={`${relatedName(invoice.vendors)} · ${invoice.invoice_number}`}
+        title={`${relatedName(invoice.vendors)} #${invoice.invoice_number}`}
         description={
-          <>
-            {invoice.invoice_date}
+          <span className="inline-flex flex-wrap items-center gap-2">
+            {undated ? (
+              editable ? (
+                <>
+                  Date: <InvoiceDateInput invoiceId={invoice.id} />
+                </>
+              ) : (
+                "No date"
+              )
+            ) : (
+              new Date(`${invoice.invoice_date}T12:00:00`).toLocaleDateString(
+                "en-US",
+                { month: "long", day: "numeric", year: "numeric" },
+              )
+            )}
+            {posted ? (
+              <Badge tone="good">Posted</Badge>
+            ) : (
+              <Badge tone="warning">{invoice.status}</Badge>
+            )}
             {signedUrl && (
               <a
                 href={signedUrl}
                 target="_blank"
-                className="ml-3 underline underline-offset-4"
+                rel="noreferrer"
+                className="underline underline-offset-4"
               >
                 Open document
               </a>
             )}
-          </>
+          </span>
         }
         actions={
-          <>
-            {invoice.status === "reviewed" && (
-              <form action={approveInvoiceAction.bind(null, invoice.id)}>
-                <button className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--foreground)] bg-[var(--foreground)] px-3.5 text-sm font-medium text-white transition hover:bg-[#343a32] disabled:cursor-not-allowed disabled:opacity-50">
-                  Approve and post cost
-                </button>
-              </form>
-            )}
-          </>
+          editable && (
+            <ApproveInvoiceButton
+              invoiceId={invoice.id}
+              disabled={undated || unmatched > 0}
+              label={period ? "Approve and receive" : "Approve prices"}
+            />
+          )
         }
       />
       <PageBody>
-        <div className="mt-7 grid gap-7 lg:grid-cols-[1fr_1.2fr]">
+        {editable && (undated || unmatched > 0) ? (
+          <Callout
+            tone="warning"
+            title={
+              undated
+                ? "Set the invoice date to approve"
+                : `${unmatched} line${unmatched === 1 ? "" : "s"} still need an item`
+            }
+          >
+            {undated
+              ? "This vendor's file had no date. It decides whether the delivery counts toward a period."
+              : "Match each line once; the vendor's code is remembered for future invoices."}
+          </Callout>
+        ) : editable ? (
+          <Callout
+            tone="neutral"
+            title={
+              period
+                ? `Approving receives these items into stock for ${formatPeriodLabel(period)}`
+                : "Approving records prices only"
+            }
+          >
+            {period
+              ? "Quantities are added to on-hand and prices update recipe costs and price alerts."
+              : "This invoice is dated before your current period, so it updates price history without adding stock."}
+          </Callout>
+        ) : null}
+
+        <div
+          className={`grid gap-5 ${signedUrl ? "xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]" : ""}`}
+        >
+          <Panel flush>
+            <TableScroll>
+              <table className={`${tableClass} min-w-[720px]`}>
+                <thead>
+                  <tr>
+                    <th className={thClass}>Invoice line</th>
+                    <th className={thClass}>Inventory item</th>
+                    <th className={thNumClass}>Qty</th>
+                    <th className={thNumClass}>Unit price</th>
+                    <th className={thNumClass}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoice.lines.map((line) => {
+                    const item = Array.isArray(line.inventory_items)
+                      ? line.inventory_items[0]
+                      : line.inventory_items;
+                    return (
+                      <tr
+                        key={line.id}
+                        className={
+                          line.inventory_item_id ? undefined : "bg-[#fdf8ee]"
+                        }
+                      >
+                        <td className={tdClass}>
+                          <span className="font-medium">
+                            {line.product_description}
+                          </span>
+                          <span className="block text-xs text-[var(--muted)]">
+                            {line.vendor_product_code && (
+                              <span className="font-mono">
+                                {line.vendor_product_code}
+                              </span>
+                            )}
+                            {line.pack_size && ` · ${line.pack_size}`}
+                          </span>
+                        </td>
+                        <td className={tdClass}>
+                          <LineMatch
+                            invoiceId={invoice.id}
+                            lineId={line.id}
+                            current={
+                              line.inventory_item_id && item
+                                ? {
+                                    id: line.inventory_item_id,
+                                    name: item.name,
+                                  }
+                                : null
+                            }
+                            source={line.match_source}
+                            items={itemOptions}
+                            editable={editable}
+                          />
+                        </td>
+                        <td className={tdNumClass}>
+                          {Number(line.quantity_invoiced)}
+                        </td>
+                        <td className={tdNumClass}>
+                          {formatMoney(Number(line.unit_price))}
+                        </td>
+                        <td className={tdNumClass}>
+                          {formatMoney(Number(line.line_total))}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </TableScroll>
+            <div className="flex justify-end gap-6 border-t px-4 py-3 text-sm tabular-nums">
+              <span className="text-[var(--muted)]">
+                Lines {formatMoney(linesTotal)}
+              </span>
+              <span className="font-semibold">
+                Invoice total {formatMoney(Number(invoice.total_amount))}
+              </span>
+            </div>
+          </Panel>
           {signedUrl && (
-            <div className="order-2 min-h-[600px] border bg-white lg:order-1">
-              <div className="bg-[var(--foreground)] px-4 py-3">
-                <p className="font-mono text-[10px] tracking-[0.13em] text-[#bdc2bb] uppercase">
-                  Source document
-                </p>
-              </div>
+            <Panel title="Source document" flush>
               <iframe
                 src={signedUrl}
-                className="h-[600px] w-full"
+                className="h-[640px] w-full rounded-b-lg"
                 title="Invoice source document"
               />
-            </div>
+            </Panel>
           )}
-
-          <div
-            className={`overflow-x-auto border ${signedUrl ? "order-1 lg:order-2" : ""}`}
-          >
-            <table className="w-full min-w-[620px] text-sm">
-              <thead className="border-b bg-[var(--surface)] text-left text-xs font-medium text-[var(--muted)]">
-                <tr>
-                  <th className="px-4 py-2.5">Product</th>
-                  <th className="px-4 py-2.5">Mapped item</th>
-                  <th className="px-4 py-2.5">Pack</th>
-                  <th className="px-4 py-2.5 text-right">Qty</th>
-                  <th className="px-4 py-2.5 text-right">Unit price</th>
-                  <th className="px-4 py-2.5 text-right">Line total</th>
-                  <th className="px-4 py-2.5">Anomalies</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoice.lines.map((line) => (
-                  <tr key={line.id} className="border-b last:border-b-0">
-                    <td className="px-4 py-2.5">
-                      <p className="font-semibold">
-                        {line.product_description}
-                      </p>
-                      <p className="font-mono text-xs text-[var(--muted)]">
-                        {line.vendor_product_code}
-                      </p>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {relatedName(line.inventory_items) || "Unmapped"}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {line.pack_size || "\u2014"}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      {Number(line.quantity_invoiced)}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      ${Number(line.unit_price).toFixed(2)}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      ${Number(line.line_total).toFixed(2)}
-                    </td>
-                    <td className="p-3 text-xs text-[var(--accent-strong)]">
-                      {line.anomaly_codes.length
-                        ? line.anomaly_codes.join(", ").replaceAll("_", " ")
-                        : "None"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="border-t p-4 text-right text-lg font-semibold">
-              Invoice total: ${Number(invoice.total_amount).toFixed(2)}
-            </div>
-          </div>
         </div>
       </PageBody>
     </>

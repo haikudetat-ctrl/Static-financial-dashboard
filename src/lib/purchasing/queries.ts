@@ -326,11 +326,12 @@ export async function getInvoices(organizationId: string, locationId: string) {
   const { data } = await supabase
     .from("invoices")
     .select(
-      "id, vendor_id, invoice_number, invoice_date, status, total_amount, vendors(name)",
+      "id, vendor_id, invoice_number, invoice_date, status, total_amount, vendors(name), invoice_lines(inventory_item_id)",
     )
     .eq("organization_id", organizationId)
     .eq("location_id", locationId)
-    .order("invoice_date", { ascending: false });
+    .order("invoice_date", { ascending: false })
+    .order("created_at", { ascending: false });
   return data ?? [];
 }
 
@@ -348,7 +349,7 @@ export async function getInvoiceDetail(invoiceId: string) {
   const { data: lines } = await supabase
     .from("invoice_lines")
     .select(
-      "id, line_index, vendor_product_code, product_description, pack_size, quantity_invoiced, unit_price, line_total, inventory_item_id, receipt_line_id, anomaly_codes, inventory_items(name)",
+      "id, line_index, vendor_product_code, product_description, pack_size, quantity_invoiced, unit_price, line_total, inventory_item_id, receipt_line_id, anomaly_codes, match_source, inventory_items(name)",
     )
     .eq("invoice_id", invoiceId)
     .order("line_index");
