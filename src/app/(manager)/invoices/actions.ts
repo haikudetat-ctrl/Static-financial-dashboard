@@ -169,18 +169,6 @@ export async function registerInvoiceAction(formData: FormData) {
   redirect(`/invoices/${invoice.id}/review`);
 }
 
-export async function approveInvoiceAction(invoiceId: string) {
-  await requireManager();
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("approve_invoice", {
-    target_invoice_id: invoiceId,
-  });
-  if (error) throw new Error(error.message);
-  revalidatePath("/invoices/upload");
-  revalidatePath(`/invoices/${invoiceId}/review`);
-  revalidatePath("/inventory/on-hand");
-}
-
 export async function approveInvoiceReviewAction(
   reviewId: string,
   input: unknown,
@@ -390,4 +378,122 @@ export async function createInventoryItemFromInvoiceLineAction(
   if (updateError) throw new Error(updateError.message);
 
   revalidatePath("/invoices/review");
+}
+
+export type PostInvoiceResult =
+  | { ok: true; outcome: "received" | "prices" | "posted" }
+  | { ok: false; error: string };
+
+function revalidateInvoices(invoiceId?: string) {
+  revalidatePath("/invoices/upload");
+  if (invoiceId) revalidatePath(`/invoices/${invoiceId}/review`);
+  revalidatePath("/inventory", "layout");
+  revalidatePath("/purchasing", "layout");
+  revalidatePath("/recipes", "layout");
+  revalidatePath("/today");
+}
+
+/**
+ * Approves an invoice: receives it into stock when its date is in an open
+ * period, otherwise records its prices only.
+ */
+export async function postInvoiceAction(
+  invoiceId: string,
+): Promise<PostInvoiceResult> {
+  await requireManager();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("post_vendor_invoice", {
+    target_invoice_id: invoiceId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidateInvoices(invoiceId);
+  return { ok: true, outcome: data as "received" | "prices" | "posted" };
+}
+
+/** Approves every invoice that has a date and all lines matched, oldest first. */
+export async function approveReadyInvoicesAction(): Promise<{
+  ok: true;
+  received: number;
+  prices: number;
+  failed: string[];
+}> {
+  const { context, locationId } = await requireManager();
+  const supabase = await createClient();
+  const { data: invoices } = await supabase
+    .from("invoices")
+    .select(
+      "id, invoice_number, invoice_date, invoice_lines(inventory_item_id)",
+    )
+    .eq("organization_id", context.organizationId)
+    .eq("location_id", locationId)
+    .not("status", "in", "(posted,rejected)")
+    .gte("invoice_date", "2000-01-01")
+    .order("invoice_date");
+  let received = 0;
+  let prices = 0;
+  const failed: string[] = [];
+  for (const invoice of invoices ?? []) {
+    const lines = invoice.invoice_lines as Array<{
+      inventory_item_id: string | null;
+    }>;
+    if (!lines.length || lines.some((line) => !line.inventory_item_id)) {
+      continue;
+    }
+    const { data, error } = await supabase.rpc("post_vendor_invoice", {
+      target_invoice_id: invoice.id,
+    });
+    if (error) failed.push(`#${invoice.invoice_number}: ${error.message}`);
+    else if (data === "received") received += 1;
+    else prices += 1;
+  }
+  revalidateInvoices();
+  return { ok: true, received, prices, failed };
+}
+
+export async function setInvoiceDateAction(
+  invoiceId: string,
+  date: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { context } = await requireManager();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < "2000-01-01") {
+    return { ok: false, error: "Enter a valid date." };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("invoices")
+    .update({ invoice_date: date })
+    .eq("id", invoiceId)
+    .eq("organization_id", context.organizationId)
+    .neq("status", "posted");
+  if (error) return { ok: false, error: error.message };
+  revalidateInvoices(invoiceId);
+  return { ok: true };
+}
+
+/** Matches one invoice line to an item; the vendor's code is learned. */
+export async function matchInvoiceLineAction(
+  invoiceId: string,
+  lineId: string,
+  itemId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireManager();
+  if (!itemId) return { ok: false, error: "Choose an item." };
+  const supabase = await createClient();
+  const { data: invoice } = await supabase
+    .from("invoices")
+    .select("status")
+    .eq("id", invoiceId)
+    .single();
+  if (!invoice || invoice.status === "posted") {
+    return { ok: false, error: "This invoice is already posted." };
+  }
+  const { error } = await supabase
+    .from("invoice_lines")
+    // The database marks this a manual match and learns the vendor's code.
+    .update({ inventory_item_id: itemId })
+    .eq("id", lineId)
+    .eq("invoice_id", invoiceId);
+  if (error) return { ok: false, error: error.message };
+  revalidateInvoices(invoiceId);
+  return { ok: true };
 }

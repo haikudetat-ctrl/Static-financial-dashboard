@@ -134,4 +134,23 @@ describe("cost book", () => {
     );
     expect(book.recipeCost("loop").missingCount).toBeGreaterThan(0);
   });
+
+  it("lets an invoice newer than the period cost win", () => {
+    const book = createCostBook(
+      inputs({
+        vendorUnitCost: new Map([["gin", 0.05]]),
+        snapshotDate: new Map([["gin", "2026-10-05"]]),
+        vendorDate: new Map([["gin", "2026-10-12"]]),
+      }),
+    );
+    expect(book.itemCost("gin")).toEqual({ unitCost: 0.05, source: "vendor" });
+  });
+
+  it("traces ingredient usage through house-made items", () => {
+    const usage = createCostBook(inputs()).itemUsage("martini");
+    expect(usage.get("gin")).toBeCloseTo(2 * 29.5735, 6);
+    // 0.25 fl oz of syrup is half sugar by the syrup recipe.
+    expect(usage.get("sugar")).toBeCloseTo(0.25 * 29.5735 * 0.5, 6);
+    expect(usage.has("syrup")).toBe(false);
+  });
 });

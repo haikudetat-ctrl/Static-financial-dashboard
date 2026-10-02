@@ -1,18 +1,43 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { registerInvoiceAction } from "@/app/(manager)/invoices/actions";
 import { UploadForm } from "@/components/imports/upload-form";
+import {
+  Badge,
+  EmptyState,
+  PageBody,
+  PageHeader,
+  Panel,
+  StatGrid,
+  StatTile,
+  TableScroll,
+  Tabs,
+  formatMoney,
+  tableClass,
+  tdClass,
+  tdNumClass,
+  thClass,
+  thNumClass,
+} from "@/components/ui";
 import { getUserContext } from "@/lib/auth/session";
 import { IMPORT_SOURCE_TYPES } from "@/lib/imports";
 import { getPrimaryLocation } from "@/lib/inventory/queries";
 import { getInvoices, relatedName } from "@/lib/purchasing/queries";
+import { getPeriods } from "@/lib/reporting/queries";
 import { createClient } from "@/lib/supabase/server";
-import { PageBody, PageHeader } from "@/components/ui";
 
-export const metadata: Metadata = { title: "Invoice review" };
+import { ApproveReadyButton, InvoiceDateInput } from "./invoice-controls";
+import { ManualInvoiceForm } from "./manual-invoice-form";
 
-export default async function InvoiceUploadPage() {
+export const metadata: Metadata = { title: "Invoices" };
+
+const UNDATED = "2000-01-01";
+
+export default async function InvoicesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ show?: string }>;
+}) {
   const context = await getUserContext();
   if (!context?.organizationId) return null;
   const locationId = await getPrimaryLocation(
@@ -20,15 +45,18 @@ export default async function InvoiceUploadPage() {
     context.locationId,
   );
   if (!locationId) return null;
+  const { show } = await searchParams;
   const supabase = await createClient();
   const [
     invoices,
+    periods,
     { data: vendors },
     { data: items },
     { data: receiptLines },
     { data: sourceImports },
   ] = await Promise.all([
     getInvoices(context.organizationId, locationId),
+    getPeriods(context.organizationId, locationId),
     supabase
       .from("vendors")
       .select("id, name")
@@ -51,7 +79,7 @@ export default async function InvoiceUploadPage() {
       .limit(30),
     supabase
       .from("source_imports")
-      .select("id, file_name, file_path, status, created_at")
+      .select("id, file_name, status")
       .eq("organization_id", context.organizationId)
       .eq("location_id", locationId)
       .eq("source_type", IMPORT_SOURCE_TYPES.PLCB)
@@ -59,246 +87,211 @@ export default async function InvoiceUploadPage() {
       .limit(20),
   ]);
 
+  const openPeriods = periods.filter((period) => period.status !== "closed");
+  const rows = invoices.map((invoice) => {
+    const lines = (invoice.invoice_lines ?? []) as Array<{
+      inventory_item_id: string | null;
+    }>;
+    const matched = lines.filter((line) => line.inventory_item_id).length;
+    const undated = invoice.invoice_date < UNDATED;
+    const inPeriod = openPeriods.some(
+      (period) =>
+        period.periodStart <= invoice.invoice_date &&
+        invoice.invoice_date <= period.periodEnd,
+    );
+    const open = !["posted", "rejected"].includes(invoice.status);
+    return {
+      invoice,
+      lines: lines.length,
+      matched,
+      undated,
+      inPeriod,
+      open,
+      ready: open && !undated && lines.length > 0 && matched === lines.length,
+    };
+  });
+  const toReview = rows.filter((row) => row.open);
+  const ready = toReview.filter((row) => row.ready);
+  const needsDate = toReview.filter((row) => row.undated);
+  const needsMatch = toReview.filter((row) => row.matched < row.lines);
+  const visible =
+    show === "posted" ? rows.filter((row) => !row.open) : toReview;
+
   return (
     <>
       <PageHeader
         title="Invoices"
-        description="Upload vendor invoices and review them before cost posts"
+        description="Lines match your items by vendor code automatically. Approve to record prices, and receive into stock when the invoice falls in an open period."
+        actions={<ApproveReadyButton count={ready.length} />}
       />
       <PageBody>
-        <div className="mt-7 grid gap-7 lg:grid-cols-[1fr_1.2fr]">
-          <div className="grid content-start gap-5">
-            <section className="border bg-[var(--surface)] p-5">
-              <h2 className="text-lg font-semibold">Upload source document</h2>
-              <p className="mt-2 text-xs leading-5 text-[var(--muted)]">
-                PDF files are hashed, stored privately, and registered before
-                extracted values are confirmed below.
-              </p>
-              <div className="mt-4">
-                <UploadForm
-                  sourceType={IMPORT_SOURCE_TYPES.PLCB}
-                  label="PLCB invoice"
-                  accept=".pdf"
-                />
-              </div>
-            </section>
-            <form
-              action={registerInvoiceAction}
-              className="grid gap-3 border bg-white p-5"
-            >
-              <h2 className="text-lg font-semibold">
-                Register extracted invoice
-              </h2>
-              <select
-                name="source_import_id"
-                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-              >
-                <option value="">Choose uploaded source document</option>
-                {(sourceImports ?? []).map((sourceImport) => (
-                  <option key={sourceImport.id} value={sourceImport.id}>
-                    {sourceImport.file_name} · {sourceImport.status}
-                  </option>
-                ))}
-              </select>
-              <select
-                name="vendor_id"
-                required
-                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-              >
-                <option value="">Choose vendor</option>
-                {(vendors ?? []).map((vendor) => (
-                  <option key={vendor.id} value={vendor.id}>
-                    {vendor.name}
-                  </option>
-                ))}
-              </select>
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  name="invoice_number"
-                  required
-                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                  placeholder="Invoice number"
-                />
-                <input
-                  name="invoice_date"
-                  required
-                  type="date"
-                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                />
-              </div>
-              <input
-                name="order_id"
-                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                placeholder="Vendor order / PO reference"
-              />
-              <input
-                name="document_file_path"
-                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                placeholder="Document path or upload reference"
-              />
-              <select
-                name="inventory_item_id"
-                required
-                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-              >
-                <option value="">Map inventory item</option>
-                {(items ?? []).map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                name="receipt_line_id"
-                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-              >
-                <option value="">No receipt match</option>
-                {(receiptLines ?? []).map((line) => (
-                  <option key={line.id} value={line.id}>
-                    {items?.find((item) => item.id === line.inventory_item_id)
-                      ?.name ?? "Receipt line"}{" "}
-                    · {Number(line.quantity_received)} @ $
-                    {Number(line.unit_price).toFixed(2)}
-                  </option>
-                ))}
-              </select>
-              <input
-                name="vendor_product_code"
-                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                placeholder="Vendor product code"
-              />
-              <input
-                name="product_description"
-                required
-                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                placeholder="Product description"
-              />
-              <input
-                name="pack_size"
-                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                placeholder="Pack size"
-              />
-              <div className="grid grid-cols-3 gap-3">
-                <input
-                  name="quantity"
-                  required
-                  type="number"
-                  min="0.001"
-                  step="0.001"
-                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                  placeholder="Qty"
-                />
-                <input
-                  name="unit_price"
-                  required
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                  placeholder="Unit price"
-                />
-                <input
-                  name="line_total"
-                  required
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                  placeholder="Line total"
-                />
-              </div>
-              <input
-                name="total_amount"
-                required
-                type="number"
-                min="0"
-                step="0.01"
-                className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                placeholder="Invoice total"
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  name="discount_amount"
-                  type="number"
-                  step="0.01"
-                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                  placeholder="Discount"
-                />
-                <input
-                  name="tax_amount"
-                  type="number"
-                  step="0.01"
-                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                  placeholder="Tax"
-                />
-                <input
-                  name="freight_amount"
-                  type="number"
-                  step="0.01"
-                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                  placeholder="Freight"
-                />
-                <input
-                  name="deposit_amount"
-                  type="number"
-                  step="0.01"
-                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                  placeholder="Deposit"
-                />
-                <input
-                  name="credits_amount"
-                  type="number"
-                  step="0.01"
-                  className="rounded-md border border-[var(--line-strong)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                  placeholder="Credits"
-                />
-              </div>
-              <button className="min-h-12 bg-[var(--foreground)] px-5 text-sm font-semibold text-white">
-                Stage for review
-              </button>
-            </form>
-          </div>
+        <StatGrid>
+          <StatTile
+            label="To review"
+            value={toReview.length}
+            detail={`${formatMoney(
+              toReview.reduce(
+                (sum, row) => sum + Number(row.invoice.total_amount),
+                0,
+              ),
+              { cents: false },
+            )} total`}
+          />
+          <StatTile
+            label="Ready to approve"
+            value={ready.length}
+            detail="Dated, every line matched"
+            tone={ready.length ? "good" : "neutral"}
+          />
+          <StatTile
+            label="Need a date"
+            value={needsDate.length}
+            detail="Set it in the list below"
+            tone={needsDate.length ? "warning" : "neutral"}
+          />
+          <StatTile
+            label="Need matching"
+            value={needsMatch.length}
+            detail="Lines not tied to an item"
+            tone={needsMatch.length ? "warning" : "neutral"}
+          />
+        </StatGrid>
 
-          <section>
-            <h2 className="text-lg font-semibold">Invoice register</h2>
-            <div className="mt-3 overflow-x-auto rounded-lg border bg-[var(--surface-strong)]">
-              <table className="w-full min-w-[620px] text-sm">
-                <thead className="border-b bg-[var(--surface)] text-left text-xs font-medium text-[var(--muted)]">
+        <Panel flush>
+          <div className="px-4 pt-2">
+            <Tabs
+              items={[
+                {
+                  label: `To review (${toReview.length})`,
+                  href: "/invoices/upload",
+                  active: show !== "posted",
+                },
+                {
+                  label: "Posted",
+                  href: "/invoices/upload?show=posted",
+                  active: show === "posted",
+                },
+              ]}
+            />
+          </div>
+          {visible.length === 0 ? (
+            <EmptyState
+              title={
+                show === "posted"
+                  ? "No posted invoices yet"
+                  : "Nothing to review"
+              }
+              detail="Upload a PLCB PDF below, or forward vendor invoices once email import is set up."
+            />
+          ) : (
+            <TableScroll>
+              <table className={`${tableClass} min-w-[760px]`}>
+                <thead>
                   <tr>
-                    <th className="px-4 py-2.5">Vendor</th>
-                    <th className="px-4 py-2.5">Invoice</th>
-                    <th className="px-4 py-2.5">Date</th>
-                    <th className="px-4 py-2.5">Status</th>
-                    <th className="px-4 py-2.5 text-right">Total</th>
+                    <th className={thClass}>Vendor</th>
+                    <th className={thClass}>Invoice</th>
+                    <th className={thClass}>Date</th>
+                    <th className={thClass}>Lines</th>
+                    <th className={thClass}>On approval</th>
+                    <th className={thNumClass}>Total</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {invoices.map((invoice) => (
-                    <tr key={invoice.id} className="border-b last:border-b-0">
-                      <td className="px-4 py-2.5">
-                        {relatedName(invoice.vendors)}
+                  {visible.map((row) => (
+                    <tr
+                      key={row.invoice.id}
+                      className="hover:bg-[var(--surface)]"
+                    >
+                      <td className={tdClass}>
+                        {relatedName(row.invoice.vendors)}
                       </td>
-                      <td className="px-4 py-2.5 font-medium">
+                      <td className={tdClass}>
                         <Link
-                          href={`/invoices/${invoice.id}/review`}
-                          className="underline underline-offset-4"
+                          href={`/invoices/${row.invoice.id}/review`}
+                          className="font-medium hover:underline"
                         >
-                          {invoice.invoice_number}
+                          #{row.invoice.invoice_number}
                         </Link>
                       </td>
-                      <td className="px-4 py-2.5">{invoice.invoice_date}</td>
-                      <td className="px-4 py-2.5 capitalize">
-                        {invoice.status}
+                      <td className={`${tdClass} whitespace-nowrap`}>
+                        {row.undated && row.open ? (
+                          <InvoiceDateInput invoiceId={row.invoice.id} />
+                        ) : row.undated ? (
+                          "—"
+                        ) : (
+                          new Date(
+                            `${row.invoice.invoice_date}T12:00:00`,
+                          ).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })
+                        )}
                       </td>
-                      <td className="px-4 py-2.5 text-right">
-                        ${Number(invoice.total_amount).toFixed(2)}
+                      <td className={tdClass}>
+                        {row.matched === row.lines ? (
+                          <span className="text-[var(--muted)]">
+                            {row.lines} matched
+                          </span>
+                        ) : (
+                          <Badge tone="warning">
+                            {row.lines - row.matched} of {row.lines} unmatched
+                          </Badge>
+                        )}
+                      </td>
+                      <td className={tdClass}>
+                        {!row.open ? (
+                          <Badge tone="good">Posted</Badge>
+                        ) : row.undated ? (
+                          <span className="text-xs text-[var(--muted)]">
+                            Needs a date
+                          </span>
+                        ) : row.inPeriod ? (
+                          <Badge tone="accent">Receive into stock</Badge>
+                        ) : (
+                          <Badge>Prices only</Badge>
+                        )}
+                      </td>
+                      <td className={tdNumClass}>
+                        {formatMoney(Number(row.invoice.total_amount))}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
-          </section>
+            </TableScroll>
+          )}
+          <p className="border-t px-4 py-2.5 text-xs text-[var(--muted)]">
+            “Prices only” invoices are dated before your current period: they
+            update price history and alerts but don&apos;t add stock, since your
+            opening count already covers them.
+          </p>
+        </Panel>
+
+        <div className="grid gap-5 lg:grid-cols-2">
+          <Panel
+            title="Upload a PLCB invoice"
+            description="PDF from the Licensee Online Order Portal."
+          >
+            <UploadForm
+              sourceType={IMPORT_SOURCE_TYPES.PLCB}
+              label="PLCB invoice"
+              accept=".pdf"
+            />
+          </Panel>
+          <Panel title="Enter an invoice by hand" flush>
+            <details>
+              <summary className="cursor-pointer px-4 py-3 text-sm text-[var(--muted)]">
+                Show form
+              </summary>
+              <ManualInvoiceForm
+                vendors={vendors ?? []}
+                items={items ?? []}
+                receiptLines={receiptLines ?? []}
+                sourceImports={sourceImports ?? []}
+              />
+            </details>
+          </Panel>
         </div>
       </PageBody>
     </>

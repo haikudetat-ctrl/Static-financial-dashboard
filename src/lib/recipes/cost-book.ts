@@ -92,79 +92,97 @@ export async function buildRecipeCatalog(
   const supabase = await createClient();
   const today = localToday();
 
-  const [units, items, recipes, versions, onHand, snapshots, vendorItems] =
-    await Promise.all([
-      fetchAll((from, to) =>
-        supabase
-          .from("units")
-          .select(
-            "id, name, abbreviation, unit_type, conversion_factor_to_base",
-          )
-          .eq("organization_id", organizationId)
-          .range(from, to),
-      ),
-      fetchAll((from, to) =>
-        supabase
-          .from("inventory_items")
-          .select(
-            "id, name, item_code, base_unit_id, count_unit_id, purchase_unit_id, is_produced, active, cogs_class, standard_unit_cost, standard_cost_source, standard_cost_updated_at, inventory_categories(name)",
-          )
-          .eq("organization_id", organizationId)
-          .order("name")
-          .range(from, to),
-      ),
-      fetchAll((from, to) =>
-        supabase
-          .from("recipes")
-          .select(
-            "id, name, description, recipe_type, active, menu_price, output_inventory_item_id",
-          )
-          .eq("organization_id", organizationId)
-          .order("name")
-          .range(from, to),
-      ),
-      fetchAll((from, to) =>
-        supabase
-          .from("recipe_versions")
-          .select(
-            "id, recipe_id, version_number, effective_from, effective_to, output_quantity, output_unit_id, yield_is_approximate, notes, recipes!inner(organization_id), recipe_version_components(id, component_inventory_item_id, component_recipe_id, quantity, unit_id, line_order, notes)",
-          )
-          .eq("recipes.organization_id", organizationId)
-          .eq("status", "active")
-          .lte("effective_from", today)
-          .or(`effective_to.is.null,effective_to.gte.${today}`)
-          .range(from, to),
-      ),
-      fetchAll((from, to) =>
-        supabase
-          .from("inventory_on_hand")
-          .select("inventory_item_id, quantity, extended_value")
-          .eq("organization_id", organizationId)
-          .eq("location_id", locationId)
-          .range(from, to),
-      ),
-      fetchAll((from, to) =>
-        supabase
-          .from("inventory_item_cost_snapshots")
-          .select(
-            "inventory_item_id, weighted_average_cost, effective_at, inventory_items!inner(organization_id)",
-          )
-          .eq("inventory_items.organization_id", organizationId)
-          .order("effective_at", { ascending: false })
-          .range(from, to),
-      ),
-      fetchAll((from, to) =>
-        supabase
-          .from("vendor_items")
-          .select(
-            "inventory_item_id, last_case_price, base_quantity_per_purchase_unit, is_preferred, created_at, pack_size, vendors(name)",
-          )
-          .eq("organization_id", organizationId)
-          .not("inventory_item_id", "is", null)
-          .not("last_case_price", "is", null)
-          .range(from, to),
-      ),
-    ]);
+  const [
+    units,
+    items,
+    recipes,
+    versions,
+    onHand,
+    snapshots,
+    vendorItems,
+    invoicePrices,
+  ] = await Promise.all([
+    fetchAll((from, to) =>
+      supabase
+        .from("units")
+        .select("id, name, abbreviation, unit_type, conversion_factor_to_base")
+        .eq("organization_id", organizationId)
+        .range(from, to),
+    ),
+    fetchAll((from, to) =>
+      supabase
+        .from("inventory_items")
+        .select(
+          "id, name, item_code, base_unit_id, count_unit_id, purchase_unit_id, is_produced, active, cogs_class, standard_unit_cost, standard_cost_source, standard_cost_updated_at, inventory_categories(name)",
+        )
+        .eq("organization_id", organizationId)
+        .order("name")
+        .range(from, to),
+    ),
+    fetchAll((from, to) =>
+      supabase
+        .from("recipes")
+        .select(
+          "id, name, description, recipe_type, active, menu_price, output_inventory_item_id",
+        )
+        .eq("organization_id", organizationId)
+        .order("name")
+        .range(from, to),
+    ),
+    fetchAll((from, to) =>
+      supabase
+        .from("recipe_versions")
+        .select(
+          "id, recipe_id, version_number, effective_from, effective_to, output_quantity, output_unit_id, yield_is_approximate, notes, recipes!inner(organization_id), recipe_version_components(id, component_inventory_item_id, component_recipe_id, quantity, unit_id, line_order, notes)",
+        )
+        .eq("recipes.organization_id", organizationId)
+        .eq("status", "active")
+        .lte("effective_from", today)
+        .or(`effective_to.is.null,effective_to.gte.${today}`)
+        .range(from, to),
+    ),
+    fetchAll((from, to) =>
+      supabase
+        .from("inventory_on_hand")
+        .select("inventory_item_id, quantity, extended_value")
+        .eq("organization_id", organizationId)
+        .eq("location_id", locationId)
+        .range(from, to),
+    ),
+    fetchAll((from, to) =>
+      supabase
+        .from("inventory_item_cost_snapshots")
+        .select(
+          "inventory_item_id, weighted_average_cost, effective_at, inventory_items!inner(organization_id)",
+        )
+        .eq("inventory_items.organization_id", organizationId)
+        .order("effective_at", { ascending: false })
+        .range(from, to),
+    ),
+    fetchAll((from, to) =>
+      supabase
+        .from("vendor_items")
+        .select(
+          "inventory_item_id, last_case_price, base_quantity_per_purchase_unit, is_preferred, created_at, pack_size, vendors(name)",
+        )
+        .eq("organization_id", organizationId)
+        .not("inventory_item_id", "is", null)
+        .not("last_case_price", "is", null)
+        .range(from, to),
+    ),
+    fetchAll((from, to) =>
+      supabase
+        .from("item_cost_history")
+        .select(
+          "inventory_item_id, base_unit_cost, effective_date, cost_source",
+        )
+        .eq("organization_id", organizationId)
+        .not("cost_source", "in", "(workbook,recipe_rollup,manual)")
+        .order("effective_date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .range(from, to),
+    ),
+  ]);
 
   const unitById = new Map<string, CatalogUnit>(
     units.map((unit) => [
@@ -218,11 +236,16 @@ export async function buildRecipeCatalog(
   }
 
   const snapshotUnitCost = new Map<string, number>();
+  const snapshotDate = new Map<string, string>();
   for (const snapshot of snapshots) {
     if (!snapshotUnitCost.has(snapshot.inventory_item_id)) {
       snapshotUnitCost.set(
         snapshot.inventory_item_id,
         Number(snapshot.weighted_average_cost),
+      );
+      snapshotDate.set(
+        snapshot.inventory_item_id,
+        String(snapshot.effective_at).slice(0, 10),
       );
     }
   }
@@ -252,6 +275,16 @@ export async function buildRecipeCatalog(
       casePrice: Number(vendorItem.last_case_price),
       pack: vendorItem.pack_size ?? "",
     });
+  }
+
+  // The latest invoice price on record beats the vendor item's stored
+  // price, and carries a date so it can outrank an older period cost.
+  const vendorDate = new Map<string, string>();
+  for (const price of invoicePrices) {
+    if (vendorDate.has(price.inventory_item_id)) continue;
+    if (!(Number(price.base_unit_cost) > 0)) continue;
+    vendorDate.set(price.inventory_item_id, price.effective_date);
+    vendorUnitCost.set(price.inventory_item_id, Number(price.base_unit_cost));
   }
 
   const catalogItems: CatalogItem[] = items.map((item) => ({
@@ -353,6 +386,8 @@ export async function buildRecipeCatalog(
     onHandUnitCost,
     snapshotUnitCost,
     vendorUnitCost,
+    snapshotDate,
+    vendorDate,
   });
 
   return {
