@@ -5,6 +5,9 @@ import { UploadForm } from "@/components/imports/upload-form";
 import { PageBody, PageHeader, Panel } from "@/components/ui";
 import { getUserContext } from "@/lib/auth/session";
 import { getImports, IMPORT_SOURCE_TYPES } from "@/lib/imports";
+import { getPrimaryLocation } from "@/lib/inventory/queries";
+
+import { ToastPanel } from "./toast-panel";
 
 export const metadata: Metadata = { title: "Imports" };
 
@@ -49,6 +52,9 @@ export default async function ImportsPage() {
   const imports = context?.organizationId
     ? await getImports(context.organizationId, { limit: 50 })
     : [];
+  const locationId = context?.organizationId
+    ? await getPrimaryLocation(context.organizationId, context.locationId)
+    : null;
 
   return (
     <>
@@ -61,29 +67,32 @@ export default async function ImportsPage() {
           <Panel title="Import history" flush>
             <ImportTable imports={imports} />
           </Panel>
-          <Panel title="Upload" flush>
-            <ul>
-              {SOURCES.map((source) => (
-                <li
-                  key={source.sourceType}
-                  className="grid gap-2 border-b px-4 py-4 last:border-b-0"
-                >
-                  <div>
-                    <p className="text-sm font-medium">{source.title}</p>
-                    <p className="text-xs text-[var(--muted)]">
-                      {source.detail}
-                    </p>
-                  </div>
-                  <UploadForm
-                    sourceType={source.sourceType}
-                    label={source.label}
-                    accept={source.accept}
-                    askBusinessDate={source.askBusinessDate}
-                  />
-                </li>
-              ))}
-            </ul>
-          </Panel>
+          <div className="grid gap-5">
+            {locationId && <ToastPanel locationId={locationId} />}
+            <Panel title="Upload" flush>
+              <ul>
+                {SOURCES.map((source) => (
+                  <li
+                    key={source.sourceType}
+                    className="grid gap-2 border-b px-4 py-4 last:border-b-0"
+                  >
+                    <div>
+                      <p className="text-sm font-medium">{source.title}</p>
+                      <p className="text-xs text-[var(--muted)]">
+                        {source.detail}
+                      </p>
+                    </div>
+                    <UploadForm
+                      sourceType={source.sourceType}
+                      label={source.label}
+                      accept={source.accept}
+                      askBusinessDate={source.askBusinessDate}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          </div>
         </div>
       </PageBody>
     </>

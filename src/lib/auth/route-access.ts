@@ -1,6 +1,12 @@
 export type AppRole = "manager" | "staff";
 
-const publicPrefixes = ["/auth/login", "/auth/register", "/auth/callback"];
+const publicPrefixes = [
+  "/auth/login",
+  "/auth/register",
+  "/auth/callback",
+  // Authenticated by CRON_SECRET in the route itself.
+  "/api/cron",
+];
 const staffPrefixes = ["/receive", "/count", "/production", "/waste"];
 const managerPrefixes = [
   "/today",
