@@ -271,6 +271,24 @@ export async function getToastMappingQueue(organizationId: string) {
       );
     }
   }
+  // Days the Toast API posted automatically leave no staged rows; their
+  // unmapped items still need a recipe going forward.
+  const since = new Date();
+  since.setUTCDate(since.getUTCDate() - 28);
+  const { data: unmappedSold } = await supabase
+    .from("sales_items")
+    .select(
+      "item_guid, item_name, sales_business_days!inner(organization_id, business_date)",
+    )
+    .eq("sales_business_days.organization_id", organizationId)
+    .gte("sales_business_days.business_date", since.toISOString().slice(0, 10))
+    .is("recipe_id", null)
+    .limit(5000);
+  for (const item of unmappedSold ?? []) {
+    if (item.item_guid && !mapped.has(item.item_guid)) {
+      queue.set(item.item_guid, item.item_name);
+    }
+  }
   return {
     queue: [...queue.entries()].map(([guid, name]) => ({ guid, name })),
     recipes: recipes ?? [],

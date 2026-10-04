@@ -11,6 +11,7 @@ describe("route access", () => {
     expect(isPublicRoute("/auth/login")).toBe(true);
     expect(isPublicRoute("/auth/register")).toBe(true);
     expect(isPublicRoute("/auth/callback")).toBe(true);
+    expect(isPublicRoute("/api/cron/toast-sync")).toBe(true);
     expect(isPublicRoute("/today")).toBe(false);
   });
 
