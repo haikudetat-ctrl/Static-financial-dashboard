@@ -1,12 +1,19 @@
 "use client";
 
-import { useActionState } from "react";
-
-import { buttonClass, inputClass, labelClass } from "@/components/ui";
+import { type FormEvent, useActionState, useState } from "react";
 
 import {
+  buttonClass,
+  formatMoney,
+  inputClass,
+  labelClass,
+} from "@/components/ui";
+
+import {
+  pullToastDayAction,
+  refreshToastViewsAction,
   saveToastConnectionAction,
-  syncToastDateAction,
+  type ToastDayResult,
   type ToastFormState,
 } from "./toast-actions";
 
@@ -110,6 +117,20 @@ export function ToastConnectForm({
   );
 }
 
+const MAX_RANGE_DAYS = 70;
+
+function datesBetween(from: string, to: string) {
+  const dates: string[] = [];
+  const day = new Date(`${from}T12:00:00Z`);
+  const end = new Date(`${to}T12:00:00Z`);
+  while (day <= end && dates.length <= MAX_RANGE_DAYS) {
+    dates.push(day.toISOString().slice(0, 10));
+    day.setUTCDate(day.getUTCDate() + 1);
+  }
+  return dates;
+}
+
+/** Pull one day or a whole range (e.g. a past period), a day at a time. */
 export function ToastSyncForm({
   defaultDate,
   maxDate,
@@ -117,29 +138,92 @@ export function ToastSyncForm({
   defaultDate: string;
   maxDate: string;
 }) {
-  const [state, action, pending] = useActionState<ToastFormState, FormData>(
-    syncToastDateAction,
-    {},
-  );
+  const [from, setFrom] = useState(defaultDate);
+  const [to, setTo] = useState(defaultDate);
+  const [running, setRunning] = useState(false);
+  const [results, setResults] = useState<ToastDayResult[]>([]);
+  const [error, setError] = useState("");
+
+  async function run(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    const dates = datesBetween(from, to);
+    if (!dates.length) return setError("The start date is after the end date.");
+    if (dates.length > MAX_RANGE_DAYS) {
+      return setError(`Pull at most ${MAX_RANGE_DAYS} days at a time.`);
+    }
+    setRunning(true);
+    setResults([]);
+    for (const date of dates) {
+      const result = await pullToastDayAction(date);
+      setResults((previous) => [...previous, result]);
+      // Credentials or access problems won't fix themselves on the next day.
+      if (result.status === "failed" && /login|refused/i.test(result.message)) {
+        break;
+      }
+    }
+    await refreshToastViewsAction();
+    setRunning(false);
+  }
+
+  const posted = results.filter((result) => result.status === "posted");
+  const failed = results.filter((result) => result.status === "failed");
+  const total = datesBetween(from, to).length;
+
   return (
-    <form action={action} className="grid gap-2">
-      <div className="flex items-end gap-2">
-        <label className={`${labelClass} flex-1`}>
-          Pull a business day
+    <form onSubmit={run} className="grid gap-2">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className={`${labelClass} min-w-32 flex-1`}>
+          Pull business days from
           <input
             type="date"
-            name="business_date"
             required
-            defaultValue={defaultDate}
+            value={from}
             max={maxDate}
+            onChange={(event) => setFrom(event.target.value)}
             className={inputClass}
           />
         </label>
-        <button disabled={pending} className={buttonClass("secondary")}>
-          {pending ? "Pulling…" : "Pull"}
+        <label className={`${labelClass} min-w-32 flex-1`}>
+          to
+          <input
+            type="date"
+            required
+            value={to}
+            min={from}
+            max={maxDate}
+            onChange={(event) => setTo(event.target.value)}
+            className={inputClass}
+          />
+        </label>
+        <button disabled={running} className={buttonClass("secondary")}>
+          {running ? `Pulling ${results.length + 1} of ${total}…` : "Pull"}
         </button>
       </div>
-      <Message state={state} />
+      {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
+      {results.length > 0 && (
+        <div role="status" className="grid gap-1 text-sm">
+          <p
+            className={
+              failed.length ? "text-[var(--danger)]" : "text-[var(--success)]"
+            }
+          >
+            {posted.length} posted ·{" "}
+            {formatMoney(
+              posted.reduce((sum, result) => sum + result.netSales, 0),
+            )}{" "}
+            net sales
+            {failed.length > 0 && ` · ${failed.length} failed`}
+          </p>
+          <ul className="max-h-40 overflow-y-auto text-xs text-[var(--muted)]">
+            {results.map((result) => (
+              <li key={result.date}>
+                {result.date}: {result.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </form>
   );
 }
