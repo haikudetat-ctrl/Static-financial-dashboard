@@ -96,16 +96,38 @@ export class ToastApiError extends Error {
   }
 }
 
-async function toastFetch<T>(url: string, init: RequestInit): Promise<T> {
+/** Pulls Toast's own message and request ID out of an error body. */
+export function describeToastError(body: string) {
+  try {
+    const parsed = JSON.parse(body) as {
+      message?: string;
+      error_description?: string;
+      requestId?: string;
+    };
+    const message = parsed.error_description ?? parsed.message ?? "";
+    return [message, parsed.requestId ? `(request ${parsed.requestId})` : ""]
+      .filter(Boolean)
+      .join(" ");
+  } catch {
+    return body.slice(0, 200).trim();
+  }
+}
+
+async function toastFetch<T>(
+  url: string,
+  init: RequestInit,
+  step: "login" | "data",
+): Promise<T> {
   const response = await fetch(url, { ...init, cache: "no-store" });
   if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    const detail = body.slice(0, 300).trim();
+    const detail = describeToastError(await response.text().catch(() => ""));
     const hint =
-      response.status === 401
-        ? "Toast rejected the credentials."
-        : response.status === 403
-          ? "The credential doesn't have access to this restaurant or endpoint."
+      step === "login"
+        ? response.status === 401 || response.status === 403
+          ? "Toast login failed: the client ID and secret weren't accepted. Re-enter the secret, and tick Sandbox if it's a sandbox credential."
+          : `Toast login failed (${response.status}).`
+        : response.status === 401 || response.status === 403
+          ? "Logged in, but Toast refused this restaurant. Check the restaurant GUID is one of the credential's locations and that it can read orders."
           : `Toast returned ${response.status}.`;
     throw new ToastApiError(
       detail ? `${hint} ${detail}` : hint,
@@ -118,15 +140,19 @@ async function toastFetch<T>(url: string, init: RequestInit): Promise<T> {
 export async function toastLogin(credentials: ToastCredentials) {
   const result = await toastFetch<{
     token?: { accessToken?: string };
-  }>(`${credentials.apiHost}/authentication/v1/authentication/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      clientId: credentials.clientId,
-      clientSecret: credentials.clientSecret,
-      userAccessType: "TOAST_MACHINE_CLIENT",
-    }),
-  });
+  }>(
+    `${credentials.apiHost}/authentication/v1/authentication/login`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        clientId: credentials.clientId,
+        clientSecret: credentials.clientSecret,
+        userAccessType: "TOAST_MACHINE_CLIENT",
+      }),
+    },
+    "login",
+  );
   const token = result.token?.accessToken;
   if (!token) throw new ToastApiError("Toast login returned no token.", 500);
   return token;
@@ -137,12 +163,16 @@ export function createToastClient(
   token: string,
 ) {
   const get = <T>(path: string) =>
-    toastFetch<T>(`${credentials.apiHost}${path}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Toast-Restaurant-External-ID": credentials.restaurantGuid,
+    toastFetch<T>(
+      `${credentials.apiHost}${path}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Toast-Restaurant-External-ID": credentials.restaurantGuid,
+        },
       },
-    });
+      "data",
+    );
 
   return {
     /** Every order for a business date (yyyy-mm-dd). */

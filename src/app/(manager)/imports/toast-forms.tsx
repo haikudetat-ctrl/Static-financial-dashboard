@@ -42,9 +42,9 @@ export function ToastConnectForm({
     <form action={action} className="mt-3 grid gap-3">
       <p className="text-xs text-[var(--muted)]">
         In Toast Web, open Integrations → Toast API access → Manage credentials
-        and copy the <strong>Clopen</strong> credential&apos;s client ID and
-        secret. The restaurant GUID is listed with the credential&apos;s
-        locations.
+        and copy your credential&apos;s client ID and secret (its name
+        doesn&apos;t matter). The restaurant GUID is listed with the
+        credential&apos;s locations.
       </p>
       <label className={labelClass}>
         Restaurant GUID
