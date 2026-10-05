@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getUserContext } from "@/lib/auth/session";
-import { findCountPeriod } from "@/lib/inventory/count-period";
+import {
+  businessToday,
+  findCountPeriod,
+  isValidCountDate,
+} from "@/lib/inventory/count-period";
 import { filterCountItems } from "@/lib/inventory/counts";
 import { getPrimaryLocation } from "@/lib/inventory/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -43,10 +47,15 @@ export async function createInventoryCountAction(formData: FormData) {
     throw new Error("Select at least one storage zone.");
   }
 
-  const period = await findCountPeriod(organizationId, locationId);
+  const countDate = String(formData.get("count_date") || businessToday());
+  if (!isValidCountDate(countDate)) {
+    throw new Error("Pick a count date from the last week.");
+  }
+
+  const period = await findCountPeriod(organizationId, locationId, countDate);
   if (!period) {
     throw new Error(
-      "No open period covers today. Create the period before starting a count.",
+      "No open period covers the count date. Create the period before starting a count.",
     );
   }
 
@@ -107,6 +116,7 @@ export async function createInventoryCountAction(formData: FormData) {
       location_id: locationId,
       inventory_period_id: period.id,
       count_type: countType,
+      count_date: countDate,
       status: "in_progress",
       assigned_to: assignedProfileId,
     })
@@ -264,8 +274,33 @@ export async function approveInventoryCountAction(countId: string) {
   if (error) throw new Error(error.message);
   revalidatePath("/inventory");
   revalidatePath("/inventory/on-hand");
+  revalidatePath("/inventory/variance");
   revalidatePath("/exceptions/negative-inventory");
   redirect("/inventory/on-hand");
+}
+
+/**
+ * Moves a count to another business date before it's approved, e.g. a
+ * morning count that should stand for the previous night's close.
+ */
+export async function setCountDateAction(countId: string, formData: FormData) {
+  const { organizationId, locationId } = await requireManager();
+  const countDate = String(formData.get("count_date") ?? "");
+  if (!isValidCountDate(countDate)) {
+    throw new Error("Pick a count date from the last week.");
+  }
+  const period = await findCountPeriod(organizationId, locationId, countDate);
+  if (!period) throw new Error("No open period covers that date.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("inventory_counts")
+    .update({ count_date: countDate, inventory_period_id: period.id })
+    .eq("id", countId)
+    .neq("status", "approved");
+  if (error) throw new Error(error.message);
+  revalidatePath(`/inventory/counts/${countId}/review`);
+  revalidatePath(`/inventory/counts/${countId}`);
+  revalidatePath("/inventory/counts");
 }
 
 export async function approveInventoryCountLineAction(

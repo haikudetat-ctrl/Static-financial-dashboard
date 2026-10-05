@@ -16,9 +16,11 @@ import { getUserContext } from "@/lib/auth/session";
 import { localToday } from "@/lib/inventory/count-period";
 import { getPrimaryLocation } from "@/lib/inventory/queries";
 import {
+  countWindows,
   getItemVariance,
   getPostedCounts,
   pickPeriodCounts,
+  salesWindow,
   type PostedCount,
 } from "@/lib/inventory/variance";
 import {
@@ -62,30 +64,30 @@ export default async function VariancePage({
   const range = resolveReportRange({ period: params.period }, periods, today);
   const period = periods.find((candidate) => candidate.id === range.periodId);
 
-  // Counts: chosen explicitly, else the period's opening and closing count.
+  // Counts: chosen explicitly, else the period's opening and closing count
+  // (or its latest mid-period checkpoint while the period is running).
   const byId = new Map(counts.map((count) => [count.id, count]));
   const picked = period
     ? pickPeriodCounts(counts, period)
-    : { opening: null, closing: null };
+    : { opening: null, closing: null, checkpoints: [] };
+  const latest = picked.closing ?? picked.checkpoints.at(-1) ?? null;
   const opening: PostedCount | null =
     (params.from && byId.get(params.from)) || picked.opening;
   const closing: PostedCount | null =
-    (params.to && byId.get(params.to)) || picked.closing;
+    (params.to && byId.get(params.to)) || latest;
   const ready = Boolean(
     opening && closing && closing.postedAt > opening.postedAt,
   );
+  const windows = countWindows(picked);
+  const partial = !params.to && !picked.closing && Boolean(latest);
 
-  // Sales between the counts, within the period when one is chosen.
-  const salesStart = opening
-    ? period && period.periodStart > opening.countDate
-      ? period.periodStart
-      : opening.countDate
-    : range.start;
-  const salesEnd = closing
-    ? period && period.periodEnd < closing.countDate
-      ? period.periodEnd
-      : closing.countDate
-    : range.end;
+  // Sales from the day after the opening count through the closing count.
+  const sales =
+    ready && opening && closing
+      ? salesWindow(opening, closing)
+      : { start: range.start, end: range.end };
+  const salesStart = sales.start;
+  const salesEnd = sales.end;
 
   const rows =
     ready && opening && closing
@@ -171,10 +173,52 @@ export default async function VariancePage({
           </Panel>
         ) : (
           <>
+            {windows.length > 1 || partial ? (
+              <nav
+                aria-label="Count windows"
+                className="flex flex-wrap items-center gap-2 text-sm"
+              >
+                {[
+                  {
+                    from: picked.opening!,
+                    to: latest!,
+                    label: picked.closing ? "Whole period" : "Period so far",
+                  },
+                  ...windows.map((window) => ({
+                    ...window,
+                    label: `${dateLabel(window.from.countDate)} → ${dateLabel(window.to.countDate)}`,
+                  })),
+                ].map((window) => {
+                  const active =
+                    opening!.id === window.from.id &&
+                    closing!.id === window.to.id;
+                  const query = new URLSearchParams({
+                    ...(range.periodId ? { period: range.periodId } : {}),
+                    from: window.from.id,
+                    to: window.to.id,
+                  });
+                  return (
+                    <a
+                      key={`${window.from.id}:${window.to.id}`}
+                      href={`/inventory/variance?${query}`}
+                      aria-current={active ? "page" : undefined}
+                      className={`rounded-full border px-3 py-1 ${
+                        active
+                          ? "border-[var(--accent)] bg-[#fdf5ee] font-medium"
+                          : "hover:bg-[var(--surface)]"
+                      }`}
+                    >
+                      {window.label}
+                    </a>
+                  );
+                })}
+              </nav>
+            ) : null}
             <p className="text-sm text-[var(--muted)]">
-              Counts {dateLabel(opening!.countDate)} →{" "}
-              {dateLabel(closing!.countDate)} · sales{" "}
+              Shelf {dateLabel(opening!.countDate)} close →{" "}
+              {dateLabel(closing!.countDate)} close · sales{" "}
               {formatRangeLabel(salesStart, salesEnd)}
+              {partial ? " · closing count not taken yet" : ""}
             </p>
             {uncosted > 0 && (
               <Callout

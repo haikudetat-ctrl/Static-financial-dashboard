@@ -10,6 +10,35 @@ export function localToday() {
   });
 }
 
+/** Hours after midnight that still belong to the previous business day. */
+export const BUSINESS_DAY_CUTOFF_HOURS = 4;
+
+/**
+ * The business date at the bar: a count finished at 1 AM after Sunday's
+ * close is Sunday's count. Matches locations.business_day_cutoff.
+ */
+export function businessToday(now = new Date()) {
+  return new Date(
+    now.getTime() - BUSINESS_DAY_CUTOFF_HOURS * 60 * 60 * 1000,
+  ).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
+export function shiftDate(date: string, days: number) {
+  const value = new Date(`${date}T12:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+/** How far back a count can be dated (a late-entered paper count). */
+export const COUNT_DATE_MAX_AGE_DAYS = 7;
+
+/** A count date must be a real day within the last week, not the future. */
+export function isValidCountDate(date: string, today = businessToday()) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  if (Number.isNaN(new Date(`${date}T12:00:00Z`).getTime())) return false;
+  return date <= today && date >= shiftDate(today, -COUNT_DATE_MAX_AGE_DAYS);
+}
+
 export type CountPeriod = {
   id: string;
   period_start: string;

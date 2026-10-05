@@ -2,7 +2,11 @@ import { CountSetupForm } from "@/components/inventory/count-setup-form";
 import { SectionNav } from "@/components/layout/section-nav";
 import { PageBody, PageHeader } from "@/components/ui";
 import { getUserContext } from "@/lib/auth/session";
-import { findCountPeriod } from "@/lib/inventory/count-period";
+import {
+  businessToday,
+  findCountPeriod,
+  shiftDate,
+} from "@/lib/inventory/count-period";
 import { getCountSetup, getPrimaryLocation } from "@/lib/inventory/queries";
 import { formatPeriodLabel } from "@/lib/reporting/period-range";
 
@@ -23,9 +27,10 @@ export async function CountSetup({
     context.locationId,
   );
   if (!locationId) return null;
+  const today = businessToday();
   const [setup, period] = await Promise.all([
     getCountSetup(context.organizationId, locationId),
-    findCountPeriod(context.organizationId, locationId),
+    findCountPeriod(context.organizationId, locationId, today),
   ]);
 
   const staff = new Map<string, string>();
@@ -99,6 +104,7 @@ export async function CountSetup({
           }
           staff={[...staff.entries()].map(([id, name]) => ({ id, name }))}
           currentUserId={context.user.id}
+          countDates={{ today, yesterday: shiftDate(today, -1) }}
           areas={areas}
           categories={countType === "spot" ? setup.categories : []}
           items={countType === "spot" ? items : []}

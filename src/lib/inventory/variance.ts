@@ -5,9 +5,9 @@ import { DISPLAY_UNIT } from "@/lib/recipes/units";
 export type PostedCount = {
   id: string;
   countType: "full" | "spot";
-  /** Local date the count was started. */
+  /** Business date whose close the count records. */
   countDate: string;
-  /** When the count posted to the ledger. */
+  /** Ledger time of the posting: the end of that business day. */
   postedAt: string;
 };
 
@@ -34,12 +34,6 @@ export type VarianceRow = {
   counted: boolean;
 };
 
-function localDate(timestamp: string) {
-  return new Date(timestamp).toLocaleDateString("en-CA", {
-    timeZone: "America/New_York",
-  });
-}
-
 function addDays(date: string, days: number) {
   const value = new Date(`${date}T12:00:00Z`);
   value.setUTCDate(value.getUTCDate() + days);
@@ -54,11 +48,11 @@ export async function getPostedCounts(
   const supabase = await createClient();
   const { data: counts } = await supabase
     .from("inventory_counts")
-    .select("id, count_type, created_at")
+    .select("id, count_type, count_date")
     .eq("organization_id", organizationId)
     .eq("location_id", locationId)
     .eq("status", "approved")
-    .order("created_at", { ascending: false })
+    .order("count_date", { ascending: false })
     .limit(100);
   const ids = (counts ?? []).map((count) => count.id);
   if (ids.length === 0) return [];
@@ -79,15 +73,23 @@ export async function getPostedCounts(
     .map((count) => ({
       id: count.id,
       countType: count.count_type,
-      countDate: localDate(count.created_at),
+      countDate: count.count_date,
       postedAt: postedAt.get(count.id)!,
     }));
 }
 
+/** Days of slack around a period's edges for its opening and closing count. */
+const EDGE_DAYS = {
+  openingAfterStart: 2,
+  closingBeforeEnd: 2,
+  closingAfterEnd: 7,
+};
+
 /**
- * The opening and closing counts for a period: the last full count taken
- * up to two days into the period, and the last full count after that up
- * to a week past the period's end.
+ * The counts that bound a period: the opening (the last full count up to
+ * two days into the period, normally the night before it starts), the
+ * closing (a full count within two days before or a week after it ends)
+ * and any full counts in between, which split it into checkpoint windows.
  */
 export function pickPeriodCounts(
   counts: PostedCount[],
@@ -96,19 +98,60 @@ export function pickPeriodCounts(
   const full = counts
     .filter((count) => count.countType === "full")
     .sort((a, b) => a.postedAt.localeCompare(b.postedAt));
-  const opening = [...full]
-    .reverse()
-    .find((count) => count.countDate <= addDays(period.periodStart, 2));
-  const closing = opening
-    ? [...full]
-        .reverse()
-        .find(
-          (count) =>
-            count.postedAt > opening.postedAt &&
-            count.countDate <= addDays(period.periodEnd, 7),
-        )
-    : undefined;
-  return { opening: opening ?? null, closing: closing ?? null };
+  const opening =
+    [...full]
+      .reverse()
+      .find(
+        (count) =>
+          count.countDate <=
+          addDays(period.periodStart, EDGE_DAYS.openingAfterStart),
+      ) ?? null;
+  if (!opening) return { opening: null, closing: null, checkpoints: [] };
+  const later = full.filter((count) => count.postedAt > opening.postedAt);
+  const closing =
+    [...later]
+      .reverse()
+      .find(
+        (count) =>
+          count.countDate >=
+            addDays(period.periodEnd, -EDGE_DAYS.closingBeforeEnd) &&
+          count.countDate <=
+            addDays(period.periodEnd, EDGE_DAYS.closingAfterEnd),
+      ) ?? null;
+  const checkpoints = later.filter((count) =>
+    closing
+      ? count.postedAt < closing.postedAt
+      : count.countDate <
+        addDays(period.periodEnd, -EDGE_DAYS.closingBeforeEnd),
+  );
+  return { opening, closing, checkpoints };
+}
+
+/**
+ * Consecutive count-to-count windows: opening → each checkpoint → closing
+ * (or the latest checkpoint while the period is still running).
+ */
+export function countWindows(picked: {
+  opening: PostedCount | null;
+  closing: PostedCount | null;
+  checkpoints: PostedCount[];
+}) {
+  if (!picked.opening) return [];
+  const stops = [
+    picked.opening,
+    ...picked.checkpoints,
+    ...(picked.closing ? [picked.closing] : []),
+  ];
+  return stops.slice(1).map((to, index) => ({ from: stops[index], to }));
+}
+
+/**
+ * Sales that fall between two counts. Each count records a business day's
+ * close, so sales start the day after the opening count and run through
+ * the closing count's day.
+ */
+export function salesWindow(opening: PostedCount, closing: PostedCount) {
+  return { start: addDays(opening.countDate, 1), end: closing.countDate };
 }
 
 export async function getItemVariance({
