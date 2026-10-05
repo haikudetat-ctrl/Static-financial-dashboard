@@ -31,6 +31,8 @@ export type CountListRow = {
   countType: "full" | "spot";
   status: string;
   createdAt: string;
+  /** Business date whose close the count records. */
+  countDate: string;
   periodLabel: string;
   assigneeName: string;
   totalLines: number;
@@ -47,7 +49,7 @@ export async function getCountList(
   let query = supabase
     .from("inventory_counts")
     .select(
-      "id, count_type, status, created_at, inventory_periods(period_start, period_end, fiscal_year, period_number), profiles!inventory_counts_assigned_to_fkey(name, email), inventory_count_assignments(id)",
+      "id, count_type, status, created_at, count_date, inventory_periods(period_start, period_end, fiscal_year, period_number), profiles!inventory_counts_assigned_to_fkey(name, email), inventory_count_assignments(id)",
     )
     .eq("organization_id", organizationId)
     .eq("location_id", locationId)
@@ -83,6 +85,7 @@ export async function getCountList(
         countType: count.count_type,
         status: count.status,
         createdAt: count.created_at,
+        countDate: count.count_date,
         periodLabel: labelFor(period),
         assigneeName: profile?.name || profile?.email || "Unassigned",
         totalLines,
@@ -122,7 +125,7 @@ export async function getCountSheet(countId: string) {
   const { data: count } = await supabase
     .from("inventory_counts")
     .select(
-      "id, organization_id, count_type, status, created_at, inventory_periods(id, period_start, period_end, fiscal_year, period_number), profiles!inventory_counts_assigned_to_fkey(name, email)",
+      "id, organization_id, count_type, status, created_at, count_date, inventory_periods(id, period_start, period_end, fiscal_year, period_number), profiles!inventory_counts_assigned_to_fkey(name, email)",
     )
     .eq("id", countId)
     .maybeSingle();
@@ -246,6 +249,7 @@ export async function getCountSheet(countId: string) {
     countType: count.count_type as "full" | "spot",
     status: count.status as string,
     createdAt: count.created_at as string,
+    countDate: count.count_date as string,
     period,
     periodLabel: labelFor(period),
     assigneeName: profile?.name || profile?.email || "Unassigned",

@@ -1,3 +1,4 @@
+import { shiftDate } from "@/lib/inventory/count-period";
 import { createClient } from "@/lib/supabase/server";
 import type { ReadinessCheck } from "@/lib/reporting/types";
 
@@ -18,39 +19,63 @@ export async function checkCloseReadiness(
 
   const checks: ReadinessCheck[] = [];
 
-  // 1. Opening count exists and approved
-  const { count: openingFullCounts } = await supabase
+  // 1–2. Opening and closing full counts, found by the business date they
+  // record (the opening is usually the previous period's closing count).
+  const { data: fullCounts } = await supabase
     .from("inventory_counts")
-    .select("*", { count: "exact", head: true })
-    .eq("inventory_period_id", periodId)
+    .select("count_date")
+    .eq("organization_id", organizationId)
+    .eq("location_id", locationId)
     .eq("count_type", "full")
-    .eq("status", "approved");
+    .eq("status", "approved")
+    .gte("count_date", shiftDate(period.period_start, -7))
+    .lte("count_date", shiftDate(period.period_end, 7));
+  const dates = (fullCounts ?? []).map((count) => count.count_date as string);
+  const openingDate = dates
+    .filter((date) => date <= shiftDate(period.period_start, 2))
+    .sort()
+    .at(-1);
+  const closingDate = dates
+    .filter(
+      (date) =>
+        date >= shiftDate(period.period_end, -2) &&
+        (!openingDate || date > openingDate),
+    )
+    .sort()
+    .at(-1);
+  const checkpoints = dates.filter(
+    (date) =>
+      (!openingDate || date > openingDate) &&
+      date < shiftDate(period.period_end, -2),
+  ).length;
+  const dayLabel = (date: string) =>
+    new Date(`${date}T12:00:00`).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
 
   checks.push({
     label: "Opening inventory count approved",
-    pass: (openingFullCounts ?? 0) > 0,
+    pass: Boolean(openingDate),
     severity: "blocking",
-    detail:
-      (openingFullCounts ?? 0) > 0
-        ? `${openingFullCounts} full count(s) approved.`
-        : "No full count has been approved for this period.",
+    detail: openingDate
+      ? `Full count of the ${dayLabel(openingDate)} close.`
+      : "No approved full count on or just before the period's first day.",
   });
-
-  // 2. Closing count exists and approved
-  const { count: closingCounts } = await supabase
-    .from("inventory_counts")
-    .select("*", { count: "exact", head: true })
-    .eq("inventory_period_id", periodId)
-    .eq("status", "approved");
 
   checks.push({
     label: "Closing inventory count approved",
-    pass: (closingCounts ?? 0) > 0,
+    pass: Boolean(closingDate),
     severity: "blocking",
-    detail:
-      (closingCounts ?? 0) > 0
-        ? `${closingCounts} count(s) approved.`
-        : "No count has been approved for this period.",
+    detail: closingDate
+      ? `Full count of the ${dayLabel(closingDate)} close${
+          checkpoints
+            ? `, with ${checkpoints} mid-period checkpoint${checkpoints === 1 ? "" : "s"}`
+            : ""
+        }.`
+      : checkpoints
+        ? `${checkpoints} mid-period checkpoint${checkpoints === 1 ? "" : "s"} approved; the closing count is still due.`
+        : "No approved full count at the end of the period.",
   });
 
   // 3. No unapproved invoices in period

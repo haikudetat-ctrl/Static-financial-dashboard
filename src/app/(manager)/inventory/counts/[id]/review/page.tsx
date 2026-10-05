@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import {
   approveInventoryCountAction,
   requestRecountAction,
+  setCountDateAction,
 } from "@/app/(manager)/inventory/counts/actions";
 import {
   Badge,
@@ -19,18 +20,31 @@ import {
   TableScroll,
   buttonClass,
   formatMoney,
+  inputClass,
   tableClass,
   tdClass,
   tdNumClass,
   thClass,
   thNumClass,
 } from "@/components/ui";
+import {
+  COUNT_DATE_MAX_AGE_DAYS,
+  businessToday,
+  shiftDate,
+} from "@/lib/inventory/count-period";
 import { getCountReview, getCountSheet } from "@/lib/inventory/count-sheet";
 import { formatInventoryQuantity } from "@/lib/inventory/counts";
 
 import { COUNT_STATUS_LABEL, COUNT_STATUS_TONE } from "../../status";
 
 export const metadata: Metadata = { title: "Count review" };
+
+const dayLabel = (date: string) =>
+  new Date(`${date}T12:00:00`).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
 
 /** A line is worth a look at ±1 count unit or ±$10. */
 const MATERIAL_QUANTITY = 1;
@@ -44,6 +58,7 @@ export default async function CountReviewPage({
   searchParams: Promise<{ show?: string }>;
 }) {
   const { id } = await params;
+  const today = businessToday();
   const { show } = await searchParams;
   const sheet = await getCountSheet(id);
   if (!sheet) notFound();
@@ -100,6 +115,7 @@ export default async function CountReviewPage({
         description={
           <span className="inline-flex flex-wrap items-center gap-2">
             {sheet.periodLabel}
+            <span>· Shelf as of {dayLabel(sheet.countDate)} close</span>
             <Badge tone={COUNT_STATUS_TONE[sheet.status] ?? "neutral"}>
               {COUNT_STATUS_LABEL[sheet.status] ?? sheet.status}
             </Badge>
@@ -153,6 +169,32 @@ export default async function CountReviewPage({
         )}
         {sheet.status === "approved" && (
           <Callout tone="good" title="Approved and posted to inventory" />
+        )}
+        {sheet.status !== "approved" && (
+          <form
+            action={setCountDateAction.bind(null, id)}
+            className="flex flex-wrap items-end gap-3 rounded-lg border bg-[var(--surface-strong)] px-4 py-3 text-sm"
+          >
+            <label className="grid gap-1 text-xs font-medium text-[var(--muted)]">
+              Count date
+              <input
+                type="date"
+                name="count_date"
+                defaultValue={sheet.countDate}
+                min={shiftDate(today, -COUNT_DATE_MAX_AGE_DAYS)}
+                max={today}
+                className={inputClass}
+              />
+            </label>
+            <button type="submit" className={buttonClass("secondary", "sm")}>
+              Change date
+            </button>
+            <p className="max-w-md text-xs text-[var(--muted)]">
+              The business day whose close this count records. A count taken
+              before opening stands for the night before. It posts as of the end
+              of that day, whenever you approve it.
+            </p>
+          </form>
         )}
 
         <StatGrid>

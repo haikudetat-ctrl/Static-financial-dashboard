@@ -96,11 +96,14 @@ export default async function CountsPage() {
                             {count.countType === "full" ? "Full" : "Spot"} count
                           </Link>
                           <span className="block text-xs text-[var(--muted)]">
-                            Started{" "}
-                            {new Date(count.createdAt).toLocaleDateString(
-                              "en-US",
-                              { month: "short", day: "numeric" },
-                            )}
+                            {new Date(
+                              `${count.countDate}T12:00:00`,
+                            ).toLocaleDateString("en-US", {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                            })}{" "}
+                            close
                           </span>
                         </td>
                         <td className={`${tdClass} whitespace-nowrap`}>

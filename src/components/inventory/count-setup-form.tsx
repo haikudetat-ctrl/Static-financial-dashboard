@@ -25,6 +25,7 @@ export function CountSetupForm({
   periodLabel,
   staff,
   currentUserId,
+  countDates,
   areas,
   categories = [],
   items = [],
@@ -33,6 +34,8 @@ export function CountSetupForm({
   periodLabel: string | null;
   staff: Array<{ id: string; name: string }>;
   currentUserId: string;
+  /** Business dates: tonight's close, or last night's for a morning count. */
+  countDates: { today: string; yesterday: string };
   areas: Area[];
   categories?: Array<{ id: string; name: string }>;
   items?: Item[];
@@ -142,9 +145,27 @@ export function CountSetupForm({
               ))}
             </select>
           </label>
-          <p className="self-end text-xs leading-5 text-[var(--muted)]">
-            Managers can enter any count from the count sheet. Staff see counts
-            assigned to them on their phone.
+          <label className={labelClass}>
+            When
+            <select
+              name="count_date"
+              defaultValue={countDates.today}
+              className={inputClass}
+            >
+              <option value={countDates.today}>
+                Tonight after close · {dayLabel(countDates.today)}
+              </option>
+              <option value={countDates.yesterday}>
+                This morning before open · counts as{" "}
+                {dayLabel(countDates.yesterday)} close
+              </option>
+            </select>
+          </label>
+          <p className="text-xs leading-5 text-[var(--muted)] sm:col-span-2">
+            A count is a snapshot of the shelf at the end of a business day.
+            Sales after it, and deliveries dated after it, land in the next
+            window. Managers can enter any count from the count sheet; staff see
+            counts assigned to them on their phone.
           </p>
         </div>
 
@@ -316,6 +337,13 @@ export function CountSetupForm({
     </form>
   );
 }
+
+const dayLabel = (date: string) =>
+  new Date(`${date}T12:00:00`).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
 
 function SubmitButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
