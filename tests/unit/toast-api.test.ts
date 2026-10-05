@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildMenuIndex,
+  describeToastError,
   summarizeOrders,
   toToastDate,
   type ToastOrder,
@@ -146,5 +147,15 @@ describe("toast dates", () => {
     ]);
     expect(datesToSync("2026-09-01", "2026-10-04")).toHaveLength(7);
     expect(datesToSync("2026-10-03", "2026-10-04")).toEqual([]);
+  });
+});
+
+describe("describeToastError", () => {
+  it("keeps Toast's message and request ID", () => {
+    expect(
+      describeToastError(
+        '{"error":"access_denied","error_description":"Unauthorized","status":401,"requestId":"abc-123"}',
+      ),
+    ).toBe("Unauthorized (request abc-123)");
   });
 });

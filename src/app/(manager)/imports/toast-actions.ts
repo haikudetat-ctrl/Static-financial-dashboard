@@ -84,33 +84,59 @@ export async function saveToastConnectionAction(
   }
 }
 
-export async function syncToastDateAction(
-  _state: ToastFormState,
-  formData: FormData,
-): Promise<ToastFormState> {
+export type ToastDayResult = {
+  date: string;
+  status: string;
+  message: string;
+  netSales: number;
+};
+
+/**
+ * Pulls one business day. The range form calls this once per day so a
+ * long backfill never runs into the function time limit.
+ */
+export async function pullToastDayAction(
+  date: string,
+): Promise<ToastDayResult> {
   try {
     const { locationId } = await requireManager();
-    const date = String(formData.get("business_date") ?? "");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return { message: "Choose a business date." };
-    }
-    if (date > addDays(localToday(), -1)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > addDays(localToday(), -1)) {
       return {
-        message:
-          "Toast closes a business day after 4 AM; pick yesterday or earlier.",
+        date,
+        status: "failed",
+        message: "Pick yesterday or earlier.",
+        netSales: 0,
       };
     }
     const credentials = await loadToastCredentials(locationId);
-    if (!credentials) return { message: "Connect Toast first." };
+    if (!credentials) {
+      return {
+        date,
+        status: "failed",
+        message: "Connect Toast first.",
+        netSales: 0,
+      };
+    }
     const result = await syncToastDay(credentials, date, { trigger: "manual" });
-    refresh();
     return {
-      ok: result.status !== "failed",
-      message: `${date}: ${result.message}`,
+      date,
+      status: result.status,
+      message: result.message,
+      netSales: result.netSales,
     };
   } catch (error) {
-    return { message: errorMessage(error) };
+    return {
+      date,
+      status: "failed",
+      message: errorMessage(error),
+      netSales: 0,
+    };
   }
+}
+
+export async function refreshToastViewsAction() {
+  await requireManager();
+  refresh();
 }
 
 export async function setToastAutoPostAction(formData: FormData) {
