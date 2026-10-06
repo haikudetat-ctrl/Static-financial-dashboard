@@ -3,6 +3,7 @@ import { extractOrderDetail } from "@/lib/toast/detail";
 import {
   createToastClient,
   summarizeOrders,
+  ToastApiError,
   toastLogin,
   type ToastCredentials,
   type ToastMenuIndex,
@@ -215,20 +216,97 @@ export type ToastSession = {
   client: ReturnType<typeof createToastClient>;
   menu: ToastMenuIndex;
   categories: Map<string, string>;
+  /** The token came from the cache, so Toast may still reject it. */
+  cached?: boolean;
 };
 
+/** Menus change rarely; Toast rate-limits the menus endpoint hard. */
+export const MENU_CACHE_HOURS = 6;
+/** Sign in again when the token has less than this left. */
+const TOKEN_MARGIN_MS = 10 * 60 * 1000;
+
+type SessionCache = {
+  access_token: string | null;
+  token_expires_at: string | null;
+  menu: Array<[string, { name: string; group: string }]> | null;
+  categories: Array<[string, string]> | null;
+  menu_fetched_at: string | null;
+};
+
+/**
+ * A signed-in Toast client with the menu and sales categories. Reuses the
+ * stored token and menu when they're still good, so a long backfill signs
+ * in once, not once per day. Pass fresh to ignore the cache (new
+ * credentials, or a token Toast just rejected).
+ */
 export async function openToastSession(
-  credentials: ToastCredentials,
+  credentials: ToastCredentials & { connectionId?: string },
+  {
+    admin = createAdminClient(),
+    fresh = false,
+    now = Date.now(),
+  }: { admin?: Admin; fresh?: boolean; now?: number } = {},
 ): Promise<ToastSession> {
-  const token = await toastLogin(credentials);
-  const client = createToastClient(credentials, token);
-  // Menu and category names are nice to have; the credential may not
-  // carry those scopes.
-  const [menu, categories] = await Promise.all([
-    client.menuIndex().catch(() => new Map() as ToastMenuIndex),
-    client.salesCategories().catch(() => new Map<string, string>()),
-  ]);
-  return { client, menu, categories };
+  const connectionId = credentials.connectionId;
+  let cache: SessionCache | null = null;
+  if (connectionId && !fresh) {
+    const { data } = await admin
+      .from("toast_session_cache")
+      .select(
+        "access_token, token_expires_at, menu, categories, menu_fetched_at",
+      )
+      .eq("connection_id", connectionId)
+      .maybeSingle();
+    cache = (data as SessionCache | null) ?? null;
+  }
+
+  const tokenValid =
+    cache?.access_token &&
+    cache.token_expires_at &&
+    new Date(cache.token_expires_at).getTime() - now > TOKEN_MARGIN_MS;
+  const login = tokenValid
+    ? { token: cache!.access_token!, expiresAt: cache!.token_expires_at! }
+    : await toastLogin(credentials);
+  const client = createToastClient(credentials, login.token);
+
+  const menuValid =
+    cache?.menu &&
+    cache.menu_fetched_at &&
+    now - new Date(cache.menu_fetched_at).getTime() <
+      MENU_CACHE_HOURS * 60 * 60 * 1000;
+  let menu: ToastMenuIndex;
+  let categories: Map<string, string>;
+  if (menuValid) {
+    menu = new Map(cache!.menu!);
+    categories = new Map(cache!.categories ?? []);
+  } else {
+    // Menu and category names are nice to have; the credential may not
+    // carry those scopes.
+    [menu, categories] = await Promise.all([
+      client.menuIndex().catch(() => new Map() as ToastMenuIndex),
+      client.salesCategories().catch(() => new Map<string, string>()),
+    ]);
+  }
+
+  if (connectionId && (!tokenValid || !menuValid)) {
+    await admin.from("toast_session_cache").upsert(
+      {
+        connection_id: connectionId,
+        access_token: login.token,
+        token_expires_at: login.expiresAt,
+        ...(menuValid
+          ? {}
+          : {
+              menu: [...menu],
+              categories: [...categories],
+              menu_fetched_at: new Date(now).toISOString(),
+            }),
+        updated_at: new Date(now).toISOString(),
+      },
+      { onConflict: "connection_id" },
+    );
+  }
+  return { client, menu, categories, cached: Boolean(tokenValid) };
 }
 
 const CHUNK = 500;
@@ -339,8 +417,25 @@ async function pullDay(
     };
   }
 
-  const session = existingSession ?? (await openToastSession(connection));
-  const orders = await session.client.ordersForDate(businessDate);
+  let session =
+    existingSession ?? (await openToastSession(connection, { admin }));
+  let orders: ToastOrder[];
+  try {
+    orders = await session.client.ordersForDate(businessDate);
+  } catch (error) {
+    // A stored token Toast no longer accepts: sign in again once.
+    if (
+      !(
+        error instanceof ToastApiError &&
+        error.status === 401 &&
+        session.cached
+      )
+    ) {
+      throw error;
+    }
+    session = await openToastSession(connection, { admin, fresh: true });
+    orders = await session.client.ordersForDate(businessDate);
+  }
 
   if (postedDay) {
     // Sales were posted before detail was kept: backfill the detail only.
