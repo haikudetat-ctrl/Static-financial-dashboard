@@ -1,10 +1,12 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { extractOrderDetail } from "@/lib/toast/detail";
 import {
   createToastClient,
   summarizeOrders,
   toastLogin,
   type ToastCredentials,
   type ToastMenuIndex,
+  type ToastOrder,
 } from "@/lib/toast/api";
 
 export const TOAST_PARSER_VERSION = "toast-api-1";
@@ -229,6 +231,83 @@ export async function openToastSession(
   return { client, menu, categories };
 }
 
+const CHUNK = 500;
+
+/**
+ * Replaces a day's saved checks and items with what Toast reports now, and
+ * records the day as saved. Returns how many checks were saved.
+ */
+export async function saveOrderDetail(
+  admin: Admin,
+  connection: Pick<ToastConnectionCredentials, "organizationId" | "locationId">,
+  businessDate: string,
+  orders: ToastOrder[],
+  menu?: ToastMenuIndex,
+) {
+  const detail = extractOrderDetail(orders, businessDate, menu);
+  const scope = {
+    organization_id: connection.organizationId,
+    location_id: connection.locationId,
+  };
+  for (const table of ["toast_check_items", "toast_checks"] as const) {
+    const { error } = await admin
+      .from(table)
+      .delete()
+      .eq("location_id", connection.locationId)
+      .eq("business_date", businessDate);
+    if (error) throw new Error(error.message);
+  }
+  for (const [table, rows] of [
+    ["toast_checks", detail.checks],
+    ["toast_check_items", detail.items],
+  ] as const) {
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const { error } = await admin
+        .from(table)
+        .insert(rows.slice(i, i + CHUNK).map((row) => ({ ...scope, ...row })));
+      if (error) throw new Error(error.message);
+    }
+  }
+  const { error } = await admin.from("toast_detail_days").upsert(
+    {
+      ...scope,
+      business_date: businessDate,
+      check_count: detail.checks.length,
+      item_count: detail.items.length,
+      net_sales: detail.netSales,
+      saved_at: new Date().toISOString(),
+    },
+    { onConflict: "location_id,business_date" },
+  );
+  if (error) throw new Error(error.message);
+  return detail.checks.length;
+}
+
+/** Saves detail without letting a failure stop the sales sync. */
+async function trySaveDetail(
+  admin: Admin,
+  connection: ToastConnectionCredentials,
+  businessDate: string,
+  orders: ToastOrder[],
+  menu: ToastMenuIndex,
+) {
+  try {
+    const checks = await saveOrderDetail(
+      admin,
+      connection,
+      businessDate,
+      orders,
+      menu,
+    );
+    return { ok: true, note: `${checks} checks saved` };
+  } catch (error) {
+    return {
+      ok: false,
+      note: `order detail not saved (${error instanceof Error ? error.message : "error"})`,
+    };
+  }
+}
+
 async function pullDay(
   admin: Admin,
   connection: ToastConnectionCredentials,
@@ -236,24 +315,59 @@ async function pullDay(
   base: ToastSyncResult,
   existingSession?: ToastSession,
 ): Promise<ToastSyncResult> {
-  const { data: postedDay } = await admin
-    .from("sales_business_days")
-    .select("id, source_import_id")
-    .eq("location_id", connection.locationId)
-    .eq("business_date", businessDate)
-    .limit(1)
-    .maybeSingle();
-  if (postedDay) {
+  const [{ data: postedDay }, { data: detailDay }] = await Promise.all([
+    admin
+      .from("sales_business_days")
+      .select("id, source_import_id")
+      .eq("location_id", connection.locationId)
+      .eq("business_date", businessDate)
+      .limit(1)
+      .maybeSingle(),
+    admin
+      .from("toast_detail_days")
+      .select("business_date")
+      .eq("location_id", connection.locationId)
+      .eq("business_date", businessDate)
+      .maybeSingle(),
+  ]);
+  if (postedDay && detailDay) {
     return {
       ...base,
       status: "skipped",
       importId: postedDay.source_import_id,
-      message: "Sales for this day are already posted.",
+      message: "Sales and order detail for this day are already saved.",
     };
   }
 
   const session = existingSession ?? (await openToastSession(connection));
   const orders = await session.client.ordersForDate(businessDate);
+
+  if (postedDay) {
+    // Sales were posted before detail was kept: backfill the detail only.
+    const saved = await trySaveDetail(
+      admin,
+      connection,
+      businessDate,
+      orders,
+      session.menu,
+    );
+    if (!saved.ok) throw new Error(saved.note);
+    return {
+      ...base,
+      status: "skipped",
+      importId: postedDay.source_import_id,
+      orderCount: orders.length,
+      message: `Sales already posted; ${saved.note}.`,
+    };
+  }
+
+  const detail = await trySaveDetail(
+    admin,
+    connection,
+    businessDate,
+    orders,
+    session.menu,
+  );
   const summary = summarizeOrders(orders, businessDate, {
     menu: session.menu,
     categories: session.categories,
@@ -268,7 +382,7 @@ async function pullDay(
       ...base,
       ...totals,
       status: "empty",
-      message: "Toast reported no sales for this day.",
+      message: `Toast reported no sales for this day; ${detail.note}.`,
     };
   }
 
@@ -348,7 +462,7 @@ async function pullDay(
       status: "staged",
       importId,
       unmappedCount: unmapped.length,
-      message: `Staged for review.${unmappedNote}`,
+      message: `Staged for review.${unmappedNote} ${detail.note}.`,
     };
   }
 
@@ -363,6 +477,6 @@ async function pullDay(
     status: "posted",
     importId,
     unmappedCount: unmapped.length,
-    message: `Posted.${unmappedNote}`,
+    message: `Posted.${unmappedNote} ${detail.note}.`,
   };
 }

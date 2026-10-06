@@ -20,6 +20,24 @@ export type ToastCredentials = {
 
 type Reference = { guid?: string | null } | null | undefined;
 
+export type ToastAppliedDiscount = {
+  guid?: string;
+  name?: string | null;
+  discountAmount?: number | null;
+  discount?: Reference;
+  approver?: Reference;
+};
+
+export type ToastModifier = {
+  guid?: string;
+  displayName?: string | null;
+  item?: Reference;
+  optionGroup?: Reference;
+  quantity?: number | null;
+  price?: number | null;
+  modifiers?: ToastModifier[] | null;
+};
+
 export type ToastSelection = {
   guid?: string;
   displayName?: string | null;
@@ -31,22 +49,52 @@ export type ToastSelection = {
   price?: number | null;
   preDiscountPrice?: number | null;
   voided?: boolean | null;
+  voidReason?: Reference;
   deferred?: boolean | null;
+  createdDate?: string | null;
   refundDetails?: { refundAmount?: number | null } | null;
+  appliedDiscounts?: ToastAppliedDiscount[] | null;
+  modifiers?: ToastModifier[] | null;
+};
+
+export type ToastPayment = {
+  guid?: string;
+  type?: string | null;
+  cardType?: string | null;
+  amount?: number | null;
+  tipAmount?: number | null;
+  refundStatus?: string | null;
+  paymentStatus?: string | null;
 };
 
 export type ToastCheck = {
   guid?: string;
+  displayNumber?: string | null;
+  openedDate?: string | null;
+  closedDate?: string | null;
+  paidDate?: string | null;
   voided?: boolean | null;
   deleted?: boolean | null;
+  amount?: number | null;
+  taxAmount?: number | null;
+  totalAmount?: number | null;
+  appliedDiscounts?: ToastAppliedDiscount[] | null;
+  payments?: ToastPayment[] | null;
   selections?: ToastSelection[] | null;
 };
 
 export type ToastOrder = {
   guid?: string;
   businessDate?: number | null;
+  openedDate?: string | null;
+  closedDate?: string | null;
+  paidDate?: string | null;
   voided?: boolean | null;
   deleted?: boolean | null;
+  server?: Reference;
+  diningOption?: Reference;
+  revenueCenter?: Reference;
+  numberOfGuests?: number | null;
   checks?: ToastCheck[] | null;
 };
 
