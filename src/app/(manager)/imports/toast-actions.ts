@@ -70,7 +70,8 @@ export async function saveToastConnectionAction(
     const credentials = await loadToastCredentials(locationId);
     if (!credentials) return { message: "Saved, but couldn't read it back." };
     try {
-      await openToastSession(credentials);
+      // New credentials: never trust a token cached for the old ones.
+      await openToastSession(credentials, { fresh: true });
     } catch (loginError) {
       refresh();
       return {

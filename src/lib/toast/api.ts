@@ -157,37 +157,64 @@ export function describeToastError(body: string) {
       .filter(Boolean)
       .join(" ");
   } catch {
-    return body.slice(0, 200).trim();
+    // HTML error pages (rate limiter, gateway) say nothing useful.
+    return /<html/i.test(body) ? "" : body.slice(0, 200).trim();
   }
 }
+
+/** How many times a rate-limited call is retried, and the longest wait. */
+export const RATE_LIMIT_RETRIES = 3;
+const MAX_RETRY_WAIT_MS = 10_000;
+
+/** Wait before retrying a 429: Toast's Retry-After, else 1s, 2s, 4s. */
+export function retryDelayMs(retryAfter: string | null, attempt: number) {
+  const seconds = Number(retryAfter);
+  const ms =
+    retryAfter && Number.isFinite(seconds)
+      ? seconds * 1000
+      : 1000 * 2 ** attempt;
+  return Math.min(Math.max(ms, 250), MAX_RETRY_WAIT_MS);
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function toastFetch<T>(
   url: string,
   init: RequestInit,
   step: "login" | "data",
+  { wait = sleep }: { wait?: (ms: number) => Promise<unknown> } = {},
 ): Promise<T> {
-  const response = await fetch(url, { ...init, cache: "no-store" });
-  if (!response.ok) {
-    const detail = describeToastError(await response.text().catch(() => ""));
-    const hint =
-      step === "login"
-        ? response.status === 401 || response.status === 403
-          ? "Toast login failed: the client ID and secret weren't accepted. Re-enter the secret, and tick Sandbox if it's a sandbox credential."
-          : `Toast login failed (${response.status}).`
-        : response.status === 401 || response.status === 403
-          ? "Logged in, but Toast refused this restaurant. Check the restaurant GUID is one of the credential's locations and that it can read orders."
-          : `Toast returned ${response.status}.`;
-    throw new ToastApiError(
-      detail ? `${hint} ${detail}` : hint,
-      response.status,
-    );
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(url, { ...init, cache: "no-store" });
+    if (response.status === 429 && attempt < RATE_LIMIT_RETRIES) {
+      await wait(retryDelayMs(response.headers.get("retry-after"), attempt));
+      continue;
+    }
+    if (!response.ok) {
+      const detail = describeToastError(await response.text().catch(() => ""));
+      const hint =
+        response.status === 429
+          ? "Toast is rate-limiting requests (429). Wait a minute and pull again."
+          : step === "login"
+            ? response.status === 401 || response.status === 403
+              ? "Toast login failed: the client ID and secret weren't accepted. Re-enter the secret, and tick Sandbox if it's a sandbox credential."
+              : `Toast login failed (${response.status}).`
+            : response.status === 401 || response.status === 403
+              ? "Logged in, but Toast refused this restaurant. Check the restaurant GUID is one of the credential's locations and that it can read orders."
+              : `Toast returned ${response.status}.`;
+      throw new ToastApiError(
+        detail ? `${hint} ${detail}` : hint,
+        response.status,
+      );
+    }
+    return (await response.json()) as T;
   }
-  return (await response.json()) as T;
 }
 
+/** Signs in and returns the access token and when it expires. */
 export async function toastLogin(credentials: ToastCredentials) {
   const result = await toastFetch<{
-    token?: { accessToken?: string };
+    token?: { accessToken?: string; expiresIn?: number };
   }>(
     `${credentials.apiHost}/authentication/v1/authentication/login`,
     {
@@ -203,7 +230,14 @@ export async function toastLogin(credentials: ToastCredentials) {
   );
   const token = result.token?.accessToken;
   if (!token) throw new ToastApiError("Toast login returned no token.", 500);
-  return token;
+  const lifetime = Number(result.token?.expiresIn ?? 0);
+  return {
+    token,
+    // Assume an hour when Toast doesn't say.
+    expiresAt: new Date(
+      Date.now() + (lifetime > 0 ? lifetime : 3600) * 1000,
+    ).toISOString(),
+  };
 }
 
 export function createToastClient(

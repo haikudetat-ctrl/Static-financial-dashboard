@@ -45,7 +45,7 @@ export async function GET(request: Request) {
       if (credentials) {
         let session;
         try {
-          session = await openToastSession(credentials);
+          session = await openToastSession(credentials, { admin });
         } catch {
           // syncToastDay logs the login failure.
         }

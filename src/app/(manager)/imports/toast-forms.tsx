@@ -118,6 +118,13 @@ export function ToastConnectForm({
 }
 
 const MAX_RANGE_DAYS = 70;
+const PAUSE_BETWEEN_DAYS_MS = 400;
+const RATE_LIMIT_WAIT_MS = 60_000;
+const RATE_LIMIT_RETRIES = 3;
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const isRateLimited = (message: string) =>
+  /\b429\b|rate-limit|too many requests/i.test(message);
 
 function datesBetween(from: string, to: string) {
   const dates: string[] = [];
@@ -145,6 +152,7 @@ export function ToastSyncForm({
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<ToastDayResult[]>([]);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   async function run(event: FormEvent) {
     event.preventDefault();
@@ -156,14 +164,35 @@ export function ToastSyncForm({
     }
     setRunning(true);
     setResults([]);
-    for (const date of dates) {
-      const result = await pullToastDayAction(date);
+    for (const [index, date] of dates.entries()) {
+      if (index > 0) await pause(PAUSE_BETWEEN_DAYS_MS);
+      let result = await pullToastDayAction(date);
+      // Toast's rate limit clears within a minute: wait and retry the day.
+      for (
+        let retry = 1;
+        result.status === "failed" &&
+        isRateLimited(result.message) &&
+        retry <= RATE_LIMIT_RETRIES;
+        retry++
+      ) {
+        setNotice(
+          `Toast asked us to slow down. Waiting a minute, then retrying ${date} (try ${retry} of ${RATE_LIMIT_RETRIES})…`,
+        );
+        await pause(RATE_LIMIT_WAIT_MS);
+        setNotice("");
+        result = await pullToastDayAction(date);
+      }
       setResults((previous) => [...previous, result]);
-      // Credentials or access problems won't fix themselves on the next day.
-      if (result.status === "failed" && /login|refused/i.test(result.message)) {
+      // Credentials, access or a lasting rate limit won't fix themselves on
+      // the next day.
+      if (
+        result.status === "failed" &&
+        (/login|refused/i.test(result.message) || isRateLimited(result.message))
+      ) {
         break;
       }
     }
+    setNotice("");
     await refreshToastViewsAction();
     setRunning(false);
   }
@@ -207,6 +236,11 @@ export function ToastSyncForm({
         </button>
       </div>
       {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
+      {notice && (
+        <p role="status" className="text-sm text-[var(--warning)]">
+          {notice}
+        </p>
+      )}
       {results.length > 0 && (
         <div role="status" className="grid gap-1 text-sm">
           <p

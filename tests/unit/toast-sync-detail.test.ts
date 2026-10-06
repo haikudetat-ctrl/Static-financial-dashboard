@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 
-import type { ToastOrder } from "@/lib/toast/api";
+import { ToastApiError, type ToastOrder } from "@/lib/toast/api";
 import { syncToastDay, type ToastSession } from "@/lib/toast/sync";
 
 type Call = {
@@ -154,5 +154,50 @@ describe("syncToastDay order detail", () => {
     expect(
       calls.some((c) => c.table === "toast_check_items" && c.op === "insert"),
     ).toBe(true);
+  });
+});
+
+describe("a stored token Toast rejects", () => {
+  it("signs in again once and carries on", async () => {
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(
+        async (url) =>
+          new Response(
+            JSON.stringify(
+              String(url).includes("/authentication/")
+                ? { token: { accessToken: "fresh", expiresIn: 86400 } }
+                : String(url).includes("menus")
+                  ? { menus: [] }
+                  : [],
+            ),
+          ),
+      );
+    const { admin, calls } = fakeAdmin({});
+    const stale: ToastSession = {
+      client: {
+        ordersForDate: vi.fn(async () => {
+          throw new ToastApiError("expired", 401);
+        }),
+      } as never,
+      menu: new Map(),
+      categories: new Map(),
+      cached: true,
+    };
+    const result = await syncToastDay(connection, "2026-10-05", {
+      trigger: "manual",
+      admin,
+      session: stale,
+    });
+    expect(result.status).toBe("empty");
+    expect(
+      fetch.mock.calls.filter(([url]) =>
+        String(url).includes("/authentication/"),
+      ),
+    ).toHaveLength(1);
+    expect(
+      calls.some((c) => c.table === "toast_session_cache" && c.op === "upsert"),
+    ).toBe(true);
+    fetch.mockRestore();
   });
 });
