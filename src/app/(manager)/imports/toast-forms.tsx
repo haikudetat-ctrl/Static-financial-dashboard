@@ -132,14 +132,16 @@ function datesBetween(from: string, to: string) {
 
 /** Pull one day or a whole range (e.g. a past period), a day at a time. */
 export function ToastSyncForm({
-  defaultDate,
+  defaultFrom,
+  defaultTo,
   maxDate,
 }: {
-  defaultDate: string;
+  defaultFrom: string;
+  defaultTo: string;
   maxDate: string;
 }) {
-  const [from, setFrom] = useState(defaultDate);
-  const [to, setTo] = useState(defaultDate);
+  const [from, setFrom] = useState(defaultFrom);
+  const [to, setTo] = useState(defaultTo);
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<ToastDayResult[]>([]);
   const [error, setError] = useState("");
@@ -167,6 +169,10 @@ export function ToastSyncForm({
   }
 
   const posted = results.filter((result) => result.status === "posted");
+  const backfilled = results.filter(
+    (result) =>
+      result.status === "skipped" && /checks saved/.test(result.message),
+  );
   const failed = results.filter((result) => result.status === "failed");
   const total = datesBetween(from, to).length;
 
@@ -213,6 +219,8 @@ export function ToastSyncForm({
               posted.reduce((sum, result) => sum + result.netSales, 0),
             )}{" "}
             net sales
+            {backfilled.length > 0 &&
+              ` · detail added to ${backfilled.length} posted day${backfilled.length === 1 ? "" : "s"}`}
             {failed.length > 0 && ` · ${failed.length} failed`}
           </p>
           <ul className="max-h-40 overflow-y-auto text-xs text-[var(--muted)]">

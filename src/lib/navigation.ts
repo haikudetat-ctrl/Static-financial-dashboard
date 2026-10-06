@@ -78,7 +78,7 @@ export const managerNavigation: NavigationItem[] = [
     label: "Imports",
     href: "/imports",
     icon: FileInput,
-    description: "Upload Toast exports and source documents.",
+    description: "Toast exports, uploads and the shared Drive inbox.",
     group: "Data",
   },
   {

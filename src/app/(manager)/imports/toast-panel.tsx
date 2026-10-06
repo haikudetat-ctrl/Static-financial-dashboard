@@ -31,7 +31,12 @@ const shortDate = (date: string) =>
 /** Toast API connection, nightly sync status and a manual "pull a day". */
 export async function ToastPanel({ locationId }: { locationId: string }) {
   const supabase = await createClient();
-  const [{ data: connection }, { data: runs }] = await Promise.all([
+  const [
+    { data: connection },
+    { data: runs },
+    { data: detailDays },
+    { data: postedDays },
+  ] = await Promise.all([
     supabase
       .from("toast_connections")
       .select(
@@ -47,7 +52,24 @@ export async function ToastPanel({ locationId }: { locationId: string }) {
       .eq("location_id", locationId)
       .order("started_at", { ascending: false })
       .limit(8),
+    supabase
+      .from("toast_detail_days")
+      .select("business_date")
+      .eq("location_id", locationId)
+      .order("business_date"),
+    supabase
+      .from("sales_business_days")
+      .select("business_date")
+      .eq("location_id", locationId)
+      .eq("status", "posted")
+      .order("business_date"),
   ]);
+  const savedDates = new Set(
+    (detailDays ?? []).map((day) => day.business_date as string),
+  );
+  const missingDetail = (postedDays ?? [])
+    .map((day) => day.business_date as string)
+    .filter((date) => !savedDates.has(date));
   const yesterday = addDays(localToday(), -1);
 
   return (
@@ -77,7 +99,19 @@ export async function ToastPanel({ locationId }: { locationId: string }) {
 
       {connection && (
         <div className="grid gap-3 border-b px-4 py-4">
-          <ToastSyncForm defaultDate={yesterday} maxDate={yesterday} />
+          <ToastSyncForm
+            defaultFrom={missingDetail[0] ?? yesterday}
+            defaultTo={missingDetail.at(-1) ?? yesterday}
+            maxDate={yesterday}
+          />
+          <p className="text-xs leading-5 text-[var(--muted)]">
+            {savedDates.size > 0
+              ? `Order detail (checks, modifiers, voids, comps, payments) saved for ${savedDates.size} day${savedDates.size === 1 ? "" : "s"}. `
+              : "Order detail (checks, modifiers, voids, comps, payments) is saved with each pull from now on. "}
+            {missingDetail.length > 0
+              ? `${missingDetail.length} posted day${missingDetail.length === 1 ? " has" : "s have"} totals only, ${shortDate(missingDetail[0])} – ${shortDate(missingDetail.at(-1)!)}: pull ${missingDetail.length === 1 ? "it" : "them"} again to add the detail. Sales aren't posted twice.`
+              : ""}
+          </p>
           <form
             action={setToastAutoPostAction}
             className="flex items-center justify-between gap-3 text-sm"
