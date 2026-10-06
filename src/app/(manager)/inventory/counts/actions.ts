@@ -9,6 +9,10 @@ import {
   findCountPeriod,
   isValidCountDate,
 } from "@/lib/inventory/count-period";
+import {
+  setCountLineUnit,
+  type SetUnitResult,
+} from "@/lib/inventory/count-units";
 import { filterCountItems } from "@/lib/inventory/counts";
 import { getPrimaryLocation } from "@/lib/inventory/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -70,7 +74,7 @@ export async function createInventoryCountAction(formData: FormData) {
   const { data: locationItems, error: itemsError } = await supabase
     .from("storage_location_items")
     .select(
-      "storage_location_id, inventory_item_id, inventory_items(category_id, count_unit_id, base_unit_id)",
+      "storage_location_id, inventory_item_id, count_unit_id, inventory_items(category_id, count_unit_id, base_unit_id)",
     )
     .in("storage_location_id", storageLocationIds);
 
@@ -140,7 +144,10 @@ export async function createInventoryCountAction(formData: FormData) {
           }[]
         | null;
       const item = Array.isArray(related) ? related[0] : related;
-      return item?.count_unit_id ?? item?.base_unit_id ?? null;
+      // The storage area's unit for this item, else the item's own.
+      return (
+        row.count_unit_id ?? item?.count_unit_id ?? item?.base_unit_id ?? null
+      );
     })
     .filter((id): id is string => Boolean(id));
   const [{ data: onHand }, { data: countUnits }] = await Promise.all([
@@ -190,7 +197,8 @@ export async function createInventoryCountAction(formData: FormData) {
           }[]
         | null;
       const item = Array.isArray(related) ? related[0] : related;
-      const countUnitId = item?.count_unit_id ?? item?.base_unit_id;
+      const countUnitId =
+        row.count_unit_id ?? item?.count_unit_id ?? item?.base_unit_id ?? null;
       const factor = Number(
         countUnits?.find((unit) => unit.id === countUnitId)
           ?.conversion_factor_to_base ?? 1,
@@ -208,6 +216,7 @@ export async function createInventoryCountAction(formData: FormData) {
         inventory_item_id: row.inventory_item_id,
         storage_location_id: storageLocationId,
         expected_quantity: expectedBaseQuantity / factor,
+        count_unit_id: countUnitId,
         status: "pending",
       };
     });
@@ -484,4 +493,26 @@ export async function cancelCountAction(countId: string) {
   revalidatePath("/inventory");
   revalidatePath("/inventory/counts");
   redirect("/inventory/counts");
+}
+
+/**
+ * Changes the unit a count line is counted in. It also becomes the unit for
+ * this item in this storage area on future counts.
+ */
+export async function setCountLineUnitAction(
+  countId: string,
+  lineId: string,
+  unitId: string,
+): Promise<SetUnitResult> {
+  await requireManager();
+  const result = await setCountLineUnit(await createClient(), {
+    lineId,
+    unitId,
+    rememberForArea: true,
+  });
+  if (result.ok) {
+    revalidatePath(`/inventory/counts/${countId}`);
+    revalidatePath(`/inventory/counts/${countId}/review`);
+  }
+  return result;
 }

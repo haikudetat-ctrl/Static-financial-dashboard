@@ -4,6 +4,7 @@ import { submitCountAssignmentAction } from "@/app/(staff)/count/actions";
 import { CountLineForm } from "@/components/inventory/count-line-form";
 import { getUserContext } from "@/lib/auth/session";
 import { formatInventoryQuantity } from "@/lib/inventory/counts";
+import { loadCountUnits, unitOptionsFor } from "@/lib/inventory/count-units";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Count" };
@@ -34,7 +35,7 @@ export default async function CountPage() {
       ? supabase
           .from("inventory_count_lines")
           .select(
-            "id, inventory_count_assignment_id, inventory_item_id, counted_quantity, counted_tenths, is_open_container, expected_quantity, notes, status",
+            "id, inventory_count_assignment_id, inventory_item_id, counted_quantity, counted_tenths, is_open_container, expected_quantity, notes, status, count_unit_id",
           )
           .in("inventory_count_assignment_id", assignmentIds)
           .order("created_at")
@@ -44,15 +45,14 @@ export default async function CountPage() {
   const { data: items } = itemIds.length
     ? await supabase
         .from("inventory_items")
-        .select("id, name, allows_tenths_counting, count_unit_id")
+        .select(
+          "id, name, organization_id, allows_tenths_counting, count_unit_id, base_unit_id, base_unit:units!inventory_items_base_unit_id_fkey(unit_type)",
+        )
         .in("id", itemIds)
     : { data: [] };
-  const unitIds = (items ?? [])
-    .map((item) => item.count_unit_id)
-    .filter((id): id is string => Boolean(id));
-  const { data: units } = unitIds.length
-    ? await supabase.from("units").select("id, abbreviation").in("id", unitIds)
-    : { data: [] };
+  const units = items?.[0]
+    ? await loadCountUnits(supabase, items[0].organization_id)
+    : [];
 
   const orderedAssignments = [...(assignments ?? [])].sort((left, right) => {
     const leftOrder =
@@ -113,16 +113,32 @@ export default async function CountPage() {
                     const item = items?.find(
                       (candidate) => candidate.id === line.inventory_item_id,
                     );
-                    const unit = units?.find(
-                      (candidate) => candidate.id === item?.count_unit_id,
+                    const unitId =
+                      line.count_unit_id ??
+                      item?.count_unit_id ??
+                      item?.base_unit_id;
+                    const unit = units.find(
+                      (candidate) => candidate.id === unitId,
                     );
+                    const baseType = (
+                      Array.isArray(item?.base_unit)
+                        ? item?.base_unit[0]
+                        : item?.base_unit
+                    )?.unit_type;
                     return (
                       <CountLineForm
                         key={line.id}
                         line={{
                           id: line.id,
                           name: item?.name ?? "Inventory item",
-                          unit: unit?.abbreviation ?? "units",
+                          unit: unit?.label ?? "units",
+                          unitId: unitId ?? null,
+                          unitOptions: unitOptionsFor(
+                            units,
+                            baseType === "volume" || baseType === "weight"
+                              ? baseType
+                              : "each",
+                          ),
                           allowsTenths: item?.allows_tenths_counting ?? false,
                           countedQuantity:
                             line.counted_quantity === null
@@ -134,7 +150,7 @@ export default async function CountPage() {
                           status: line.status,
                           expectedQuantity: `${formatInventoryQuantity(
                             Number(line.expected_quantity),
-                          )} ${unit?.abbreviation ?? "units"}`,
+                          )} ${unit?.label ?? "units"}`,
                         }}
                       />
                     );
