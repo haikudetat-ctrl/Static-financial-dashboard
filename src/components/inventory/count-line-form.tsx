@@ -8,6 +8,8 @@ export function CountLineForm({
     id: string;
     name: string;
     unit: string;
+    unitId: string | null;
+    unitOptions: Array<{ id: string; label: string }>;
     allowsTenths: boolean;
     countedQuantity: number | null;
     countedTenths: number;
@@ -24,9 +26,27 @@ export function CountLineForm({
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="font-semibold">{line.name}</h3>
-          <p className="mt-1 font-mono text-[10px] tracking-[0.12em] text-[var(--muted)] uppercase">
-            Count in {line.unit}
-          </p>
+          {line.unitOptions.length > 1 ? (
+            <label className="mt-1 flex items-center gap-2 font-mono text-[10px] tracking-[0.12em] text-[var(--muted)] uppercase">
+              Count in
+              <select
+                name="count_unit_id"
+                defaultValue={line.unitId ?? ""}
+                className="h-8 border bg-white px-2 font-sans text-xs tracking-normal text-[var(--foreground)] normal-case"
+              >
+                {!line.unitId && <option value="">{line.unit}</option>}
+                {line.unitOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <p className="mt-1 font-mono text-[10px] tracking-[0.12em] text-[var(--muted)] uppercase">
+              Count in {line.unit}
+            </p>
+          )}
         </div>
         <span className="bg-[#f3eee8] px-2 py-1 text-[10px] font-semibold tracking-wide uppercase">
           {line.status.replace("_", " ")}

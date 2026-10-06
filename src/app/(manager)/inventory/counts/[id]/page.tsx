@@ -9,6 +9,8 @@ import {
   buttonClass,
 } from "@/components/ui";
 import { getCountSheet } from "@/lib/inventory/count-sheet";
+import { loadCountUnits } from "@/lib/inventory/count-units";
+import { createClient } from "@/lib/supabase/server";
 
 import { cancelCountAction } from "../actions";
 import { COUNT_STATUS_LABEL, COUNT_STATUS_TONE } from "../status";
@@ -23,6 +25,9 @@ export default async function CountSheetPage({
 }) {
   const { id } = await params;
   const sheet = await getCountSheet(id);
+  const units = sheet
+    ? await loadCountUnits(await createClient(), sheet.organizationId)
+    : [];
   if (!sheet) notFound();
 
   const editable = ["draft", "in_progress", "counted"].includes(sheet.status);
@@ -69,6 +74,7 @@ export default async function CountSheetPage({
         <CountSheet
           countId={sheet.id}
           areas={sheet.areas}
+          units={units}
           editable={editable}
         />
       </PageBody>

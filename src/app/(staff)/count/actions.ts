@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getUserContext } from "@/lib/auth/session";
+import { setCountLineUnit } from "@/lib/inventory/count-units";
 import { createClient } from "@/lib/supabase/server";
 
 function parseNonNegative(value: FormDataEntryValue | null, label: string) {
@@ -34,7 +35,7 @@ export async function saveCountLineAction(
   const supabase = await createClient();
   const { data: line } = await supabase
     .from("inventory_count_lines")
-    .select("inventory_count_assignment_id, status")
+    .select("inventory_count_assignment_id, status, count_unit_id")
     .eq("id", countLineId)
     .single();
   if (!line) throw new Error("Count line not found.");
@@ -46,6 +47,18 @@ export async function saveCountLineAction(
     .single();
   if (assignment?.assigned_profile_id !== context.user.id) {
     throw new Error("This line is not assigned to you.");
+  }
+
+  // Counted in a different container than listed: switch the line's unit
+  // (managers decide whether the storage area keeps it).
+  const unitId = String(formData.get("count_unit_id") ?? "");
+  if (unitId && unitId !== line.count_unit_id) {
+    const result = await setCountLineUnit(supabase, {
+      lineId: countLineId,
+      unitId,
+      rememberForArea: false,
+    });
+    if (!result.ok) throw new Error(result.error);
   }
 
   if (line.status === "recount_requested") {

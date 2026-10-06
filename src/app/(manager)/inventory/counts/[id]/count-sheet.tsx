@@ -14,15 +14,28 @@ import {
   tdClass,
   thClass,
 } from "@/components/ui";
-import type { CountSheetArea } from "@/lib/inventory/count-sheet";
+import type {
+  CountSheetArea,
+  CountSheetLine,
+} from "@/lib/inventory/count-sheet";
+import {
+  unitOptionsFor,
+  type CountUnitOption,
+} from "@/lib/inventory/count-units";
 
-import { finishCountAreaAction, saveCountEntryAction } from "../actions";
+import {
+  finishCountAreaAction,
+  saveCountEntryAction,
+  setCountLineUnitAction,
+} from "../actions";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 type Entry = {
   quantity: string;
   tenths: number;
   status: string;
+  unitId: string | null;
+  unit: string;
   save: SaveState;
   /** Edited since the last save. */
   dirty: boolean;
@@ -40,6 +53,8 @@ function initialEntries(areas: CountSheetArea[]) {
           line.countedQuantity === null ? "" : String(line.countedQuantity),
         tenths: line.countedTenths,
         status: line.status,
+        unitId: line.unitId,
+        unit: line.unit,
         save: "idle",
         dirty: false,
       };
@@ -51,10 +66,13 @@ function initialEntries(areas: CountSheetArea[]) {
 export function CountSheet({
   countId,
   areas,
+  units,
   editable,
 }: {
   countId: string;
   areas: CountSheetArea[];
+  /** Every unit a line could be counted in. */
+  units: CountUnitOption[];
   editable: boolean;
 }) {
   const router = useRouter();
@@ -102,6 +120,52 @@ export function CountSheet({
       ...current,
       [lineId]: { ...current[lineId], ...patch },
     }));
+  }
+
+  async function changeUnit(line: CountSheetLine, unitId: string) {
+    const option = units.find((unit) => unit.id === unitId);
+    const previous = entries[line.id];
+    update(line.id, {
+      unitId,
+      unit: option?.label ?? previous.unit,
+      save: "saving",
+      error: undefined,
+    });
+    const result = await setCountLineUnitAction(countId, line.id, unitId);
+    if (result.ok) {
+      update(line.id, { unit: result.unit, save: "saved" });
+    } else {
+      update(line.id, {
+        unitId: previous.unitId,
+        unit: previous.unit,
+        save: "error",
+        error: result.error,
+      });
+    }
+  }
+
+  function unitPicker(line: CountSheetLine, className: string) {
+    const entry = entries[line.id];
+    const options = unitOptionsFor(units, line.unitType);
+    if (!editable || options.length < 2) {
+      return <span className={className}>{entry.unit}</span>;
+    }
+    return (
+      <select
+        value={entry.unitId ?? ""}
+        onChange={(event) => void changeUnit(line, event.target.value)}
+        aria-label={`Count ${line.name} in`}
+        title="Count in a different container. It's remembered for this storage area."
+        className={`${inputClass} h-8 max-w-44 py-0 text-xs ${className}`}
+      >
+        {!entry.unitId && <option value="">{entry.unit}</option>}
+        {options.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    );
   }
 
   async function save(
@@ -372,8 +436,10 @@ export function CountSheet({
                   <th className={`${thClass} hidden md:table-cell`}>
                     Count unit
                   </th>
-                  <th className={`${thClass} w-28 text-right`}>Full</th>
-                  <th className={`${thClass} w-24 text-right`}>Partial</th>
+                  <th className={`${thClass} w-20 text-right sm:w-28`}>Full</th>
+                  <th className={`${thClass} w-20 text-right sm:w-24`}>
+                    Partial
+                  </th>
                   <th className={`${thClass} w-8`}>
                     <span className="sr-only">Saved</span>
                   </th>
@@ -400,7 +466,12 @@ export function CountSheet({
                         <span className="font-medium">{line.name}</span>
                         <span className="block text-xs text-[var(--muted)]">
                           {query ? area.name : line.category}
-                          <span className="md:hidden"> · {line.unit}</span>
+                        </span>
+                        <span className="mt-1 block md:hidden">
+                          {unitPicker(
+                            line,
+                            "w-full max-w-none text-xs text-[var(--muted)]",
+                          )}
                         </span>
                         {entry.status === "recount_requested" && (
                           <span className="mt-1 inline-block">
@@ -409,11 +480,11 @@ export function CountSheet({
                         )}
                       </td>
                       <td
-                        className={`${tdClass} hidden text-[var(--muted)] md:table-cell`}
+                        className={`${tdClass} hidden py-1.5 text-[var(--muted)] md:table-cell`}
                       >
-                        {line.unit}
+                        {unitPicker(line, "")}
                       </td>
-                      <td className={`${tdClass} py-1.5 text-right`}>
+                      <td className="border-b px-1.5 py-1.5 text-right align-top sm:px-4">
                         <input
                           ref={(element) => {
                             if (element) inputs.current.set(line.id, element);
@@ -423,7 +494,7 @@ export function CountSheet({
                           inputMode="decimal"
                           disabled={!editable}
                           value={entry.quantity}
-                          aria-label={`Full ${line.unit} of ${line.name}`}
+                          aria-label={`Full ${entry.unit} of ${line.name}`}
                           onChange={(event) =>
                             update(line.id, {
                               quantity: event.target.value,
@@ -445,19 +516,19 @@ export function CountSheet({
                               tenths: entry.tenths,
                             });
                           }}
-                          className={`${inputClass} w-24 text-right tabular-nums ${
+                          className={`${inputClass} w-16 text-right tabular-nums sm:w-24 ${
                             entry.save === "error"
                               ? "border-[var(--danger)]"
                               : ""
                           }`}
                         />
                       </td>
-                      <td className={`${tdClass} py-1.5 text-right`}>
+                      <td className="border-b px-1.5 py-1.5 text-right align-top sm:px-4">
                         {line.allowsTenths ? (
                           <select
                             disabled={!editable}
                             value={entry.tenths}
-                            aria-label={`Partial ${line.unit} of ${line.name}`}
+                            aria-label={`Partial ${entry.unit} of ${line.name}`}
                             onChange={(event) => {
                               const tenths = Number(event.target.value);
                               const quantity =
@@ -470,7 +541,7 @@ export function CountSheet({
                                 tenths,
                               });
                             }}
-                            className={`${inputClass} w-20 text-right tabular-nums`}
+                            className={`${inputClass} w-[4.5rem] px-2 text-right tabular-nums sm:w-20 sm:px-3`}
                           >
                             {TENTHS.map((value) => (
                               <option key={value} value={value}>

@@ -103,6 +103,10 @@ export type CountSheetLine = {
   name: string;
   category: string;
   unit: string;
+  /** The unit this line is counted in. */
+  unitId: string | null;
+  /** What the item measures; picks which units fit. */
+  unitType: "volume" | "weight" | "each";
   allowsTenths: boolean;
   sortOrder: number;
   countedQuantity: number | null;
@@ -147,12 +151,19 @@ export async function getCountSheet(countId: string) {
     counted_quantity: number | string | null;
     counted_tenths: number | string;
     status: string;
+    count_unit_id: string | null;
+    line_unit: Related<{ id: string; abbreviation: string; name: string }>;
     inventory_items: Related<{
       name: string;
       item_code: string | null;
       allows_tenths_counting: boolean;
-      count_unit: Related<{ abbreviation: string; name: string }>;
-      base_unit: Related<{ abbreviation: string; name: string }>;
+      count_unit: Related<{ id: string; abbreviation: string; name: string }>;
+      base_unit: Related<{
+        id: string;
+        abbreviation: string;
+        name: string;
+        unit_type: string;
+      }>;
       inventory_categories: Related<{ name: string }>;
     }>;
   };
@@ -161,7 +172,7 @@ export async function getCountSheet(countId: string) {
     const { data, error } = await supabase
       .from("inventory_count_lines")
       .select(
-        "id, inventory_count_assignment_id, inventory_item_id, storage_location_id, counted_quantity, counted_tenths, status, inventory_items(name, item_code, allows_tenths_counting, count_unit:units!inventory_items_count_unit_id_fkey(abbreviation, name), base_unit:units!inventory_items_base_unit_id_fkey(abbreviation, name), inventory_categories(name))",
+        "id, inventory_count_assignment_id, inventory_item_id, storage_location_id, counted_quantity, counted_tenths, status, count_unit_id, line_unit:units!inventory_count_lines_count_unit_id_fkey(id, abbreviation, name), inventory_items(name, item_code, allows_tenths_counting, count_unit:units!inventory_items_count_unit_id_fkey(id, abbreviation, name), base_unit:units!inventory_items_base_unit_id_fkey(id, abbreviation, name, unit_type), inventory_categories(name))",
       )
       .in("inventory_count_assignment_id", assignmentIds)
       .order("id")
@@ -211,7 +222,11 @@ export async function getCountSheet(countId: string) {
           )
           .map((line) => {
             const item = one(line.inventory_items);
-            const unit = one(item?.count_unit) ?? one(item?.base_unit);
+            const unit =
+              one(line.line_unit) ??
+              one(item?.count_unit) ??
+              one(item?.base_unit);
+            const baseType = one(item?.base_unit)?.unit_type ?? "each";
             return {
               id: line.id,
               itemId: line.inventory_item_id,
@@ -219,6 +234,10 @@ export async function getCountSheet(countId: string) {
               name: item?.name ?? "Inventory item",
               category: one(item?.inventory_categories)?.name ?? "",
               unit: unit?.abbreviation || unit?.name || "unit",
+              unitId: unit?.id ?? null,
+              unitType: (["volume", "weight"].includes(baseType)
+                ? baseType
+                : "each") as CountSheetLine["unitType"],
               allowsTenths: item?.allows_tenths_counting ?? false,
               sortOrder:
                 sortOrder.get(
@@ -288,6 +307,7 @@ export async function getCountReview(countId: string, periodId: string | null) {
     is_open_container: boolean;
     approved_at: string | null;
     notes: string;
+    line_unit: Related<{ conversion_factor_to_base: number | string }>;
     inventory_items: Related<{
       count_unit: Related<{ conversion_factor_to_base: number | string }>;
       base_unit: Related<{ conversion_factor_to_base: number | string }>;
@@ -298,7 +318,7 @@ export async function getCountReview(countId: string, periodId: string | null) {
     const { data, error } = await supabase
       .from("inventory_count_lines")
       .select(
-        "id, inventory_item_id, expected_quantity, counted_quantity, counted_tenths, is_open_container, approved_at, notes, inventory_items(count_unit:units!inventory_items_count_unit_id_fkey(conversion_factor_to_base), base_unit:units!inventory_items_base_unit_id_fkey(conversion_factor_to_base))",
+        "id, inventory_item_id, expected_quantity, counted_quantity, counted_tenths, is_open_container, approved_at, notes, line_unit:units!inventory_count_lines_count_unit_id_fkey(conversion_factor_to_base), inventory_items(count_unit:units!inventory_items_count_unit_id_fkey(conversion_factor_to_base), base_unit:units!inventory_items_base_unit_id_fkey(conversion_factor_to_base))",
       )
       .in("inventory_count_assignment_id", assignmentIds)
       .order("id")
@@ -331,7 +351,8 @@ export async function getCountReview(countId: string, periodId: string | null) {
   return new Map<string, CountReviewLine>(
     rows.map((row) => {
       const item = one(row.inventory_items);
-      const unit = one(item?.count_unit) ?? one(item?.base_unit);
+      const unit =
+        one(row.line_unit) ?? one(item?.count_unit) ?? one(item?.base_unit);
       return [
         row.id,
         {
