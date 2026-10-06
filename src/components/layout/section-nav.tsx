@@ -22,6 +22,10 @@ const SECTIONS = {
     { label: "Variance", href: "/inventory/variance" },
     { label: "On hand", href: "/inventory/on-hand" },
   ],
+  imports: [
+    { label: "Uploads & Toast", href: "/imports" },
+    { label: "Drive inbox", href: "/imports/drive" },
+  ],
   exceptions: [
     { label: "Overview", href: "/exceptions" },
     { label: "Negative inventory", href: "/exceptions/negative-inventory" },

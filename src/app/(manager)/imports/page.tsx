@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { ImportTable } from "@/components/imports/import-table";
+import { SectionNav } from "@/components/layout/section-nav";
 import { UploadForm } from "@/components/imports/upload-form";
 import { PageBody, PageHeader, Panel } from "@/components/ui";
 import { getUserContext } from "@/lib/auth/session";
@@ -62,6 +63,7 @@ export default async function ImportsPage() {
         title="Imports"
         description="Toast exports, PLCB invoices and order guides. Duplicate files are detected automatically."
       />
+      <SectionNav section="imports" active="/imports" />
       <PageBody>
         <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
           <Panel title="Import history" flush>
