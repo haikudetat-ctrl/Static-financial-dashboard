@@ -1,8 +1,13 @@
+import Link from "next/link";
+
 import { Badge, PageHeader, SectionTabs } from "@/components/ui";
 import { getUserContext } from "@/lib/auth/session";
+import { localToday } from "@/lib/inventory/count-period";
+import { sectionNavigation } from "@/lib/navigation";
 import { getPrimaryLocation } from "@/lib/inventory/queries";
 import {
   formatPeriodLabel,
+  periodName,
   rangeQuery,
   resolveReportRange,
   selectablePeriods,
@@ -43,12 +48,7 @@ export async function loadFinancialsContext(
   return { context, locationId, periods: pickable, range };
 }
 
-const TABS = [
-  { label: "Profit & loss", path: "/financial-health" },
-  { label: "Expenses", path: "/financial-health/expenses" },
-  { label: "Sales categories", path: "/financial-health/sales-categories" },
-  { label: "Menu profitability", path: "/financial-health/menu-profitability" },
-];
+const TABS = sectionNavigation.financials;
 
 export function FinancialsHeader({
   title,
@@ -83,6 +83,7 @@ export function FinancialsHeader({
         }
         actions={
           <>
+            <PeriodSwitcher active={active} range={range} periods={periods} />
             <PeriodPicker
               value={range.periodId}
               periods={periods.map((period) => ({
@@ -97,10 +98,56 @@ export function FinancialsHeader({
       <SectionTabs
         items={TABS.map((tab) => ({
           label: tab.label,
-          href: `${tab.path}?${query}`,
-          active: tab.path === active,
+          href: `${tab.href}?${query}`,
+          active: tab.href === active,
         }))}
       />
     </>
+  );
+}
+
+/** One-click switch between the latest periods; the picker covers the rest. */
+function PeriodSwitcher({
+  active,
+  range,
+  periods,
+}: {
+  active: string;
+  range: ReportRange;
+  periods: PeriodSummary[];
+}) {
+  const today = localToday();
+  const recent = periods
+    .filter((period) => period.periodStart <= today)
+    .sort((a, b) => b.periodStart.localeCompare(a.periodStart))
+    .slice(0, 3)
+    .reverse();
+  if (recent.length < 2) return null;
+  return (
+    <nav
+      aria-label="Recent periods"
+      className="flex rounded-lg bg-[var(--sidebar)] p-[3px]"
+    >
+      {recent.map((period) => {
+        const current = period.id === range.periodId;
+        return (
+          <Link
+            key={period.id}
+            href={`${active}?period=${period.id}`}
+            aria-current={current ? "page" : undefined}
+            className={`rounded-md px-2.5 py-1 text-xs whitespace-nowrap transition ${
+              current
+                ? "bg-[var(--surface-strong)] font-medium shadow-[0_1px_2px_rgba(0,0,0,.08)]"
+                : "text-[var(--muted)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            {periodName(period) ?? formatPeriodLabel(period)}
+            {period.status !== "closed" &&
+              period.periodEnd >= today &&
+              " · open"}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }

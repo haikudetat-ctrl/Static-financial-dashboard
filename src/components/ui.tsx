@@ -8,11 +8,14 @@ export function PageHeader({
   title,
   description,
   breadcrumbs,
+  eyebrow,
   actions,
 }: {
   title: ReactNode;
   description?: ReactNode;
   breadcrumbs?: Array<{ label: string; href?: string }>;
+  /** Small overline above the title, e.g. today's date. */
+  eyebrow?: ReactNode;
   actions?: ReactNode;
 }) {
   return (
@@ -40,6 +43,11 @@ export function PageHeader({
                 </span>
               ))}
             </nav>
+          )}
+          {eyebrow && (
+            <p className="mb-1 font-mono text-[10px] tracking-[0.13em] text-[var(--accent-strong)] uppercase">
+              {eyebrow}
+            </p>
           )}
           <h1 className="truncate text-xl font-semibold tracking-[-0.02em]">
             {title}
@@ -124,29 +132,115 @@ const toneText: Record<Tone, string> = {
   accent: "text-[var(--accent-strong)]",
 };
 
+const toneFill: Record<Tone, string> = {
+  neutral: "bg-[var(--foreground)]",
+  good: "bg-[var(--success)]",
+  warning: "bg-[var(--warning)]",
+  danger: "bg-[var(--danger)]",
+  accent: "bg-[var(--accent)]",
+};
+
+export type Delta = {
+  label: string;
+  trend: "up" | "down" | "flat";
+  /** Colours the change; leave unset when direction says nothing good or bad. */
+  good?: boolean;
+};
+
+export function DeltaText({ delta }: { delta: Delta }) {
+  const arrow = delta.trend === "up" ? "▲" : delta.trend === "down" ? "▼" : "";
+  const color =
+    delta.good === undefined || delta.trend === "flat"
+      ? "text-[var(--muted)]"
+      : delta.good
+        ? "text-[var(--success)]"
+        : "text-[var(--danger)]";
+  return (
+    <span className={`text-xs font-medium whitespace-nowrap ${color}`}>
+      {arrow && (
+        <span aria-hidden="true" className="mr-0.5 text-[10px]">
+          {arrow}
+        </span>
+      )}
+      {delta.label}
+    </span>
+  );
+}
+
+/** Progress bar with an optional target tick; both as fractions of max. */
+export function Meter({
+  value,
+  target,
+  max = 1,
+  tone = "neutral",
+}: {
+  value: number;
+  target?: number | null;
+  max?: number;
+  tone?: Tone;
+}) {
+  const at = (n: number) => `${Math.min(100, Math.max(0, (n / max) * 100))}%`;
+  return (
+    <div className="relative h-1.5 rounded-full bg-[var(--line)]" aria-hidden>
+      <div
+        className={`h-full rounded-full ${toneFill[tone]}`}
+        style={{ width: at(value) }}
+      />
+      {target !== undefined && target !== null && (
+        <div
+          className="absolute -top-[3px] h-3 w-0.5 -translate-x-1/2 rounded-full bg-[var(--foreground)]"
+          style={{ left: at(target) }}
+        />
+      )}
+    </div>
+  );
+}
+
 export function StatTile({
   label,
   value,
   detail,
   tone = "neutral",
   href,
+  delta,
+  meter,
 }: {
   label: string;
   value: ReactNode;
   detail?: ReactNode;
   tone?: Tone;
   href?: string;
+  /** Change against the comparison period. */
+  delta?: Delta;
+  /** Where the value sits against its target. */
+  meter?: { value: number; target?: number | null; max?: number };
 }) {
   const body = (
     <>
-      <p className="text-xs font-medium text-[var(--muted)]">{label}</p>
-      <p
-        className={`mt-1.5 text-2xl font-semibold tracking-[-0.02em] ${toneText[tone]}`}
-      >
-        {value}
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium text-[var(--muted)]">{label}</p>
+        {tone !== "neutral" && (
+          <span
+            aria-hidden="true"
+            className={`size-2 shrink-0 rounded-full ${toneFill[tone]}`}
+          />
+        )}
+      </div>
+      <p className="mt-1.5 flex flex-wrap items-baseline gap-x-2">
+        <span
+          className={`text-2xl font-semibold tracking-[-0.02em] tabular-nums ${toneText[tone]}`}
+        >
+          {value}
+        </span>
+        {delta && <DeltaText delta={delta} />}
       </p>
+      {meter && (
+        <div className="mt-2.5">
+          <Meter {...meter} tone={tone} />
+        </div>
+      )}
       {detail && (
-        <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{detail}</p>
+        <p className="mt-2 text-xs leading-5 text-[var(--muted)]">{detail}</p>
       )}
     </>
   );
@@ -172,10 +266,13 @@ export function StatGrid({ children }: { children: ReactNode }) {
 
 const badgeTone: Record<Tone, string> = {
   neutral: "border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]",
-  good: "border-[#bfd0c3] bg-[#edf4ee] text-[var(--success)]",
-  warning: "border-[#ead6b2] bg-[#fbf3e4] text-[var(--warning)]",
-  danger: "border-[#e5c3bc] bg-[#fbeeeb] text-[var(--danger)]",
-  accent: "border-[#efcfb6] bg-[#fbefe5] text-[var(--accent-strong)]",
+  good: "border-[var(--success-line)] bg-[var(--success-soft)] text-[var(--success)]",
+  warning:
+    "border-[var(--warning-line)] bg-[var(--warning-soft)] text-[var(--warning)]",
+  danger:
+    "border-[var(--danger-line)] bg-[var(--danger-soft)] text-[var(--danger)]",
+  accent:
+    "border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent-strong)]",
 };
 
 export function Badge({
@@ -204,7 +301,7 @@ const buttonVariant: Record<ButtonVariant, string> = {
   ghost:
     "border-transparent bg-transparent text-[var(--foreground)] hover:bg-[var(--surface)]",
   danger:
-    "border-[var(--danger)] bg-[var(--surface-strong)] text-[var(--danger)] hover:bg-[#fbeeeb]",
+    "border-[var(--danger)] bg-[var(--surface-strong)] text-[var(--danger)] hover:bg-[var(--danger-soft)]",
 };
 
 export function buttonClass(
@@ -321,10 +418,10 @@ export function Tabs({
 
 const calloutTone: Record<Tone, string> = {
   neutral: "border-[var(--line)] bg-[var(--surface)]",
-  good: "border-[#bfd0c3] bg-[#f3f8f4]",
-  warning: "border-[#ead6b2] bg-[#fdf8ee]",
-  danger: "border-[#e5c3bc] bg-[#fcf2f0]",
-  accent: "border-[#efcfb6] bg-[#fdf5ee]",
+  good: "border-[var(--success-line)] bg-[var(--success-soft)]",
+  warning: "border-[var(--warning-line)] bg-[var(--warning-soft)]",
+  danger: "border-[var(--danger-line)] bg-[var(--danger-soft)]",
+  accent: "border-[var(--accent-line)] bg-[var(--accent-soft)]",
 };
 
 export function Callout({

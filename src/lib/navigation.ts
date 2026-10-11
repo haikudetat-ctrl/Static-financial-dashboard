@@ -123,3 +123,46 @@ export const staffNavigation: NavigationItem[] = [
     description: "Record waste, breakage, or spillage.",
   },
 ];
+
+/** Sub-pages of each multi-screen section, shown as tabs under the header. */
+export const sectionNavigation = {
+  financials: [
+    { label: "Profit & loss", href: "/financial-health" },
+    { label: "Expenses", href: "/financial-health/expenses" },
+    { label: "Sales categories", href: "/financial-health/sales-categories" },
+    {
+      label: "Menu profitability",
+      href: "/financial-health/menu-profitability",
+    },
+  ],
+  purchasing: [
+    { label: "Orders", href: "/purchasing" },
+    { label: "Suggested order", href: "/purchasing/suggested-order" },
+    { label: "Order guide", href: "/purchasing/order-guide" },
+    { label: "Price changes", href: "/purchasing/price-changes" },
+    { label: "Receiving", href: "/receiving/review" },
+    { label: "Reports", href: "/purchasing/reports" },
+  ],
+  recipes: [
+    { label: "Recipes", href: "/recipes" },
+    { label: "Ingredients", href: "/recipes/ingredients" },
+    { label: "Menu mappings", href: "/recipes/mappings" },
+    { label: "Sales", href: "/recipes/sales" },
+    { label: "Theoretical usage", href: "/recipes/theoretical-usage" },
+  ],
+  inventory: [
+    { label: "Overview", href: "/inventory" },
+    { label: "Counts", href: "/inventory/counts" },
+    { label: "Variance", href: "/inventory/variance" },
+    { label: "On hand", href: "/inventory/on-hand" },
+  ],
+  imports: [
+    { label: "Uploads & Toast", href: "/imports" },
+    { label: "Drive inbox", href: "/imports/drive" },
+  ],
+  exceptions: [
+    { label: "Overview", href: "/exceptions" },
+    { label: "Negative inventory", href: "/exceptions/negative-inventory" },
+    { label: "Catalog review", href: "/exceptions/catalog-review" },
+  ],
+} as const;

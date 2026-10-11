@@ -14,6 +14,15 @@
   --success: #3f6d55;
   --warning: #9a6417;
   --danger: #a63f2f;
+  /* Tinted fills and borders for tone badges, callouts and meters. */
+  --success-soft: #edf4ee;
+  --success-line: #bfd0c3;
+  --warning-soft: #fbf3e4;
+  --warning-line: #ead6b2;
+  --danger-soft: #fbeeeb;
+  --danger-line: #e5c3bc;
+  --accent-soft: #fbefe5;
+  --accent-line: #efcfb6;
 }
 
 @theme inline {

@@ -135,3 +135,56 @@ export function rangeQuery(range: ReportRange) {
     ? `period=${range.periodId}`
     : `start=${range.start}&end=${range.end}`;
 }
+
+const dayNumber = (date: string) =>
+  Date.parse(`${date}T00:00:00Z`) / 86_400_000;
+
+const shiftDate = (date: string, days: number) =>
+  new Date((dayNumber(date) + days) * 86_400_000).toISOString().slice(0, 10);
+
+/** Inclusive number of days from start to end. */
+export function daysBetween(start: string, end: string) {
+  return dayNumber(end) - dayNumber(start) + 1;
+}
+
+export type ComparisonRange = { start: string; end: string; name: string };
+
+/**
+ * What a range is measured against: the fiscal period before it, else the
+ * same number of days immediately before it. Pass `through` to compare only
+ * the first days of each (period to date against the prior period's same
+ * days).
+ */
+export function comparisonRange(
+  range: { start: string; end: string },
+  periods: PeriodSummary[],
+  through: string = range.end,
+): ComparisonRange {
+  const elapsed = daysBetween(range.start, through);
+  const prior = periods
+    .filter((period) => period.periodEnd < range.start)
+    .sort((a, b) => b.periodStart.localeCompare(a.periodStart))[0];
+  if (prior) {
+    const end = shiftDate(prior.periodStart, elapsed - 1);
+    return {
+      start: prior.periodStart,
+      end: end < prior.periodEnd ? end : prior.periodEnd,
+      name: periodName(prior) ?? "prior period",
+    };
+  }
+  return {
+    start: shiftDate(range.start, -elapsed),
+    end: shiftDate(range.start, -1),
+    name: "prior days",
+  };
+}
+
+/** Day of the range today falls on, clamped to the range. */
+export function rangeProgress(
+  range: { start: string; end: string },
+  today: string,
+) {
+  const length = daysBetween(range.start, range.end);
+  const day = Math.min(length, Math.max(0, daysBetween(range.start, today)));
+  return { day, length, daysLeft: length - day };
+}

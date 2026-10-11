@@ -74,8 +74,8 @@ export default async function CountPage() {
           Count what is here.
         </h1>
         <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
-          Work top to bottom. Expected quantities stay hidden until manager
-          review.
+          Work top to bottom — counted items fold away so the next one is always
+          on top. Expected quantities stay hidden until manager review.
         </p>
 
         {orderedAssignments.length === 0 ? (
@@ -98,16 +98,50 @@ export default async function CountPage() {
                 null,
                 assignment.id,
               );
+              const done = assignmentLines.filter(
+                (line) => line.status === "counted",
+              ).length;
+              const nextLineId = assignmentLines.find(
+                (line) => line.status !== "counted",
+              )?.id;
 
               return (
-                <section key={assignment.id} className="border">
+                <section
+                  key={assignment.id}
+                  className="overflow-hidden rounded-2xl border"
+                >
                   <header className="bg-[var(--foreground)] p-4 text-white">
-                    <p className="font-mono text-[10px] tracking-[0.13em] text-[#bdc2bb] uppercase">
-                      Walk order {location?.walk_order ?? "—"}
-                    </p>
-                    <h2 className="mt-1 text-xl font-semibold">
-                      {location?.name ?? "Storage zone"}
-                    </h2>
+                    <div className="flex items-end justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-mono text-[10px] tracking-[0.13em] text-[#bdc2bb] uppercase">
+                          Walk order {location?.walk_order ?? "—"}
+                        </p>
+                        <h2 className="mt-1 text-xl font-semibold">
+                          {location?.name ?? "Storage zone"}
+                        </h2>
+                      </div>
+                      <p className="shrink-0 text-right text-sm font-semibold tabular-nums">
+                        {done} / {assignmentLines.length}
+                        <span className="block text-[10px] font-medium text-[#bdc2bb]">
+                          counted
+                        </span>
+                      </p>
+                    </div>
+                    <div
+                      className="mt-3 h-1.5 rounded-full bg-white/15"
+                      role="progressbar"
+                      aria-label={`${location?.name ?? "Zone"} progress`}
+                      aria-valuemin={0}
+                      aria-valuemax={assignmentLines.length}
+                      aria-valuenow={done}
+                    >
+                      <div
+                        className="h-full rounded-full bg-[#f1aa72]"
+                        style={{
+                          width: `${assignmentLines.length ? (done / assignmentLines.length) * 100 : 0}%`,
+                        }}
+                      />
+                    </div>
                   </header>
                   {assignmentLines.map((line) => {
                     const item = items?.find(
@@ -118,7 +152,8 @@ export default async function CountPage() {
                     );
                     return (
                       <CountLineForm
-                        key={line.id}
+                        key={`${line.id}:${line.status}`}
+                        next={line.id === nextLineId}
                         line={{
                           id: line.id,
                           name: item?.name ?? "Inventory item",
@@ -140,7 +175,7 @@ export default async function CountPage() {
                     );
                   })}
                   <form action={submitAction} className="border-t p-4">
-                    <button className="min-h-12 w-full border-2 border-[var(--foreground)] px-4 text-sm font-semibold">
+                    <button className="min-h-12 w-full rounded-xl border-2 border-[var(--foreground)] px-4 text-sm font-semibold">
                       Submit {location?.name ?? "assignment"}
                     </button>
                   </form>
