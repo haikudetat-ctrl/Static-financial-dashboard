@@ -134,6 +134,7 @@ export const sectionNavigation = {
       label: "Menu profitability",
       href: "/financial-health/menu-profitability",
     },
+    { label: "Sales drivers", href: "/financial-health/sales-drivers" },
     { label: "Budget basis", href: "/financial-health/budget-basis" },
   ],
   purchasing: [

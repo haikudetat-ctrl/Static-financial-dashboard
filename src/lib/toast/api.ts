@@ -2,8 +2,8 @@ import { toastItemKey } from "@/lib/toast";
 
 /**
  * Read-only client for the Toast REST API (Standard API access). Only the
- * endpoints the nightly sales sync needs: orders, menus and sales
- * categories.
+ * endpoints the nightly sync needs: orders, menus and sales categories here,
+ * labor in labor.ts.
  */
 
 export const TOAST_HOSTS = {
@@ -257,6 +257,9 @@ export function createToastClient(
     );
 
   return {
+    /** A GET against any Toast path, with retries on rate limits. */
+    get,
+
     /** Every order for a business date (yyyy-mm-dd). */
     async ordersForDate(date: string, { pageSize = 100, maxPages = 100 } = {}) {
       const orders: ToastOrder[] = [];

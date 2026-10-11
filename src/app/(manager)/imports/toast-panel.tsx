@@ -36,6 +36,7 @@ export async function ToastPanel({ locationId }: { locationId: string }) {
     { data: runs },
     { data: detailDays },
     { data: postedDays },
+    { data: laborDays },
   ] = await Promise.all([
     supabase
       .from("toast_connections")
@@ -63,7 +64,18 @@ export async function ToastPanel({ locationId }: { locationId: string }) {
       .eq("location_id", locationId)
       .eq("status", "posted")
       .order("business_date"),
+    supabase
+      .from("toast_labor_days")
+      .select("business_date, wage_cost")
+      .eq("location_id", locationId)
+      .order("business_date"),
   ]);
+  const laborDates = new Set(
+    (laborDays ?? []).map((day) => day.business_date as string),
+  );
+  const missingLabor = (postedDays ?? [])
+    .map((day) => day.business_date as string)
+    .filter((date) => !laborDates.has(date));
   const savedDates = new Set(
     (detailDays ?? []).map((day) => day.business_date as string),
   );
@@ -100,8 +112,16 @@ export async function ToastPanel({ locationId }: { locationId: string }) {
       {connection && (
         <div className="grid gap-3 border-b px-4 py-4">
           <ToastSyncForm
-            defaultFrom={missingDetail[0] ?? yesterday}
-            defaultTo={missingDetail.at(-1) ?? yesterday}
+            defaultFrom={
+              [missingDetail[0], missingLabor[0]].filter(Boolean).sort()[0] ??
+              yesterday
+            }
+            defaultTo={
+              [missingDetail.at(-1), missingLabor.at(-1)]
+                .filter(Boolean)
+                .sort()
+                .at(-1) ?? yesterday
+            }
             maxDate={yesterday}
           />
           <p className="text-xs leading-5 text-[var(--muted)]">
@@ -111,6 +131,16 @@ export async function ToastPanel({ locationId }: { locationId: string }) {
             {missingDetail.length > 0
               ? `${missingDetail.length} posted day${missingDetail.length === 1 ? " has" : "s have"} totals only, ${shortDate(missingDetail[0])} – ${shortDate(missingDetail.at(-1)!)}: pull ${missingDetail.length === 1 ? "it" : "them"} again to add the detail. Sales aren't posted twice.`
               : ""}
+          </p>
+          <p className="text-xs leading-5 text-[var(--muted)]">
+            {laborDays && laborDays.length > 0
+              ? `Labor (clocked hours × hourly wage) pulled through ${shortDate(laborDays.at(-1)!.business_date)} and posted to 6100 Hourly wages. `
+              : "Labor (clocked hours × hourly wage) is pulled with each day and posted to 6100 Hourly wages. "}
+            {missingLabor.length > 0
+              ? `${missingLabor.length} sales day${missingLabor.length === 1 ? " has" : "s have"} no labor yet, ${shortDate(missingLabor[0])} – ${shortDate(missingLabor.at(-1)!)}: pull the range to add it. `
+              : ""}
+            Salaries, payroll taxes and benefits aren’t in Toast — add them
+            under Financials → Expenses.
           </p>
           <form
             action={setToastAutoPostAction}
