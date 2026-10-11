@@ -21,11 +21,7 @@ import {
 } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 import { getAttentionQueues } from "@/lib/reporting/attention";
-import {
-  PRIME_COST_TARGET,
-  amountDelta,
-  pointsDelta,
-} from "@/lib/reporting/compare";
+import { amountDelta, pointsDelta } from "@/lib/reporting/compare";
 import {
   comparisonRange,
   formatRangeLabel,
@@ -153,7 +149,7 @@ export default async function TodayPage() {
             })}
             meter={
               pct.cogs !== null
-                ? { value: pct.cogs, target: theoreticalPct, max: 0.4 }
+                ? { value: pct.cogs, marker: theoreticalPct, max: 0.4 }
                 : undefined
             }
             detail={`Recipes say ${formatPercent(theoreticalPct)} · estimated until close`}
@@ -162,22 +158,10 @@ export default async function TodayPage() {
           <StatTile
             label="Prime cost"
             value={formatPercent(pct.primeCost)}
-            tone={
-              pct.primeCost === null
-                ? "neutral"
-                : pct.primeCost <= PRIME_COST_TARGET
-                  ? "good"
-                  : "warning"
-            }
             delta={pointsDelta(pct.primeCost, priorPnl.pct.primeCost, {
               lowerIsBetter: true,
             })}
-            meter={
-              pct.primeCost !== null
-                ? { value: pct.primeCost, target: PRIME_COST_TARGET }
-                : undefined
-            }
-            detail={`Target ≤ ${formatPercent(PRIME_COST_TARGET, 0)} · labor ${formatPercent(pct.labor)}`}
+            detail={`Cost of goods ${formatPercent(pct.cogs)} + labor ${formatPercent(pct.labor)}`}
             href="/financial-health"
           />
           <StatTile

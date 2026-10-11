@@ -167,15 +167,15 @@ export function DeltaText({ delta }: { delta: Delta }) {
   );
 }
 
-/** Progress bar with an optional target tick; both as fractions of max. */
+/** Bar with an optional reference tick (e.g. recipe cost); both as fractions of max. */
 export function Meter({
   value,
-  target,
+  marker,
   max = 1,
   tone = "neutral",
 }: {
   value: number;
-  target?: number | null;
+  marker?: number | null;
   max?: number;
   tone?: Tone;
 }) {
@@ -186,10 +186,10 @@ export function Meter({
         className={`h-full rounded-full ${toneFill[tone]}`}
         style={{ width: at(value) }}
       />
-      {target !== undefined && target !== null && (
+      {marker !== undefined && marker !== null && (
         <div
           className="absolute -top-[3px] h-3 w-0.5 -translate-x-1/2 rounded-full bg-[var(--foreground)]"
-          style={{ left: at(target) }}
+          style={{ left: at(marker) }}
         />
       )}
     </div>
@@ -212,8 +212,8 @@ export function StatTile({
   href?: string;
   /** Change against the comparison period. */
   delta?: Delta;
-  /** Where the value sits against its target. */
-  meter?: { value: number; target?: number | null; max?: number };
+  /** Where the value sits against a reference point. */
+  meter?: { value: number; marker?: number | null; max?: number };
 }) {
   const body = (
     <>

@@ -134,6 +134,7 @@ export const sectionNavigation = {
       label: "Menu profitability",
       href: "/financial-health/menu-profitability",
     },
+    { label: "Budget basis", href: "/financial-health/budget-basis" },
   ],
   purchasing: [
     { label: "Orders", href: "/purchasing" },

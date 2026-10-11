@@ -1,12 +1,5 @@
 import type { Delta } from "@/components/ui";
 
-/**
- * Benchmarks the P&L is held to. Prime cost (cost of goods + labor) at or
- * under 60% of sales is the common bar-and-restaurant rule of thumb; cost of
- * goods is held to its theoretical cost from recipes instead of a fixed %.
- */
-export const PRIME_COST_TARGET = 0.6;
-
 const trendOf = (change: number) =>
   Math.abs(change) < 1e-9 ? "flat" : change > 0 ? "up" : "down";
 
