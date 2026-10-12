@@ -4,6 +4,7 @@ import { amountDelta, pointsDelta } from "@/lib/reporting/compare";
 import {
   comparisonRange,
   daysBetween,
+  periodToDate,
   rangeProgress,
 } from "@/lib/reporting/period-range";
 
@@ -86,5 +87,49 @@ describe("deltas", () => {
     });
     expect(pointsDelta(0.2, 0.2)).toMatchObject({ trend: "flat" });
     expect(pointsDelta(null, 0.2)).toBeUndefined();
+  });
+});
+
+describe("periodToDate", () => {
+  const p10 = { start: "2026-10-05", end: "2026-11-01" };
+
+  it("reads an open period through yesterday, its last complete day", () => {
+    expect(periodToDate(p10, "2026-10-12")).toEqual({
+      through: "2026-10-11",
+      inProgress: true,
+    });
+  });
+
+  it("stops at the last posted day while yesterday hasn't synced", () => {
+    expect(periodToDate(p10, "2026-10-12", "2026-10-10").through).toBe(
+      "2026-10-10",
+    );
+    // A posted day from before the period doesn't pull it backwards.
+    expect(periodToDate(p10, "2026-10-12", "2026-10-01").through).toBe(
+      "2026-10-11",
+    );
+  });
+
+  it("has no complete day on a period's first day", () => {
+    expect(periodToDate(p10, "2026-10-05")).toEqual({
+      through: null,
+      inProgress: true,
+    });
+  });
+
+  it("reads a finished period in full", () => {
+    expect(periodToDate(p10, "2026-11-02")).toEqual({
+      through: "2026-11-01",
+      inProgress: false,
+    });
+  });
+
+  it("pairs P10 to date with the same seven days of P9", () => {
+    const { through } = periodToDate(p10, "2026-10-12");
+    expect(comparisonRange(p10, periods, through!)).toEqual({
+      start: "2026-09-07",
+      end: "2026-09-13",
+      name: "P9 FY26",
+    });
   });
 });

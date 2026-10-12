@@ -188,3 +188,26 @@ export function rangeProgress(
   const day = Math.min(length, Math.max(0, daysBetween(range.start, today)));
   return { day, length, daysLeft: length - day };
 }
+
+/**
+ * The last day of a range with complete data: its end once the range is
+ * over, else yesterday (today's sales post overnight), or the last posted
+ * sales day if yesterday hasn't synced yet. Null while the range has no
+ * complete day.
+ */
+export function periodToDate(
+  range: { start: string; end: string },
+  today: string,
+  /** Latest day with posted sales: an unsynced yesterday isn't complete. */
+  lastPosted?: string | null,
+) {
+  if (range.end < today) return { through: range.end, inProgress: false };
+  let through = shiftDate(today, -1);
+  if (lastPosted && lastPosted >= range.start && lastPosted < through) {
+    through = lastPosted;
+  }
+  return {
+    through: through >= range.start ? through : null,
+    inProgress: true,
+  };
+}

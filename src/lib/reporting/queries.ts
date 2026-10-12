@@ -301,3 +301,17 @@ export async function getLaborDays(
     .lte("business_date", endDate);
   return (data ?? []) as LaborDay[];
 }
+
+/** The latest business day with posted sales, if any. */
+export async function getLastPostedSalesDay(locationId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("sales_business_days")
+    .select("business_date")
+    .eq("location_id", locationId)
+    .eq("status", "posted")
+    .order("business_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data?.business_date as string | undefined) ?? null;
+}

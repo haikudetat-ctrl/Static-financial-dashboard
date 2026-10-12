@@ -20,10 +20,19 @@ import {
   type Delta,
 } from "@/components/ui";
 import { amountDelta, pointsDelta } from "@/lib/reporting/compare";
-import { comparisonRange, rangeQuery } from "@/lib/reporting/period-range";
+import { localToday } from "@/lib/inventory/count-period";
+import {
+  comparisonRange,
+  formatRangeLabel,
+  periodToDate,
+  rangeQuery,
+} from "@/lib/reporting/period-range";
 import { checkCloseReadiness } from "@/lib/reporting/readiness";
 import type { PnlLine, PnlStatement } from "@/lib/reporting/pnl";
-import { getProfitAndLoss } from "@/lib/reporting/queries";
+import {
+  getLastPostedSalesDay,
+  getProfitAndLoss,
+} from "@/lib/reporting/queries";
 
 import {
   FinancialsHeader,
@@ -41,9 +50,21 @@ export default async function ProfitAndLossPage({
   const loaded = await loadFinancialsContext(searchParams);
   if (!loaded) return null;
   const { context, locationId, periods, range } = loaded;
-  const prior = comparisonRange(range, periods);
+  // An open period reads to date (through the last complete day) and is
+  // compared with the same number of days at the start of the prior period.
+  const toDate = periodToDate(
+    range,
+    localToday(),
+    await getLastPostedSalesDay(locationId),
+  );
+  const through = toDate.through ?? range.start;
+  const prior = comparisonRange(range, periods, through);
+  const priorLabel = toDate.inProgress ? `${prior.name} same days` : prior.name;
+  const comparedWith = toDate.inProgress
+    ? `${range.name ?? "Range"} to date (${formatRangeLabel(range.start, through)}) compared with the same days of ${prior.name} (${formatRangeLabel(prior.start, prior.end)})`
+    : `Compared with ${prior.name} (${formatRangeLabel(prior.start, prior.end)})`;
   const [pnl, priorPnl, readiness] = await Promise.all([
-    getProfitAndLoss(locationId, range.start, range.end),
+    getProfitAndLoss(locationId, range.start, through),
     getProfitAndLoss(locationId, prior.start, prior.end),
     range.periodId && range.status !== "closed"
       ? checkCloseReadiness(context.organizationId!, locationId, range.periodId)
@@ -130,7 +151,7 @@ export default async function ProfitAndLossPage({
             label="Net sales"
             value={formatMoney(totals.sales)}
             delta={amountDelta(totals.sales, priorPnl.totals.sales, {
-              against: prior.name,
+              against: priorLabel,
             })}
           />
           <StatTile
@@ -165,7 +186,7 @@ export default async function ProfitAndLossPage({
             label="Net income"
             value={formatMoney(totals.netIncome)}
             delta={amountDelta(totals.netIncome, priorPnl.totals.netIncome, {
-              against: prior.name,
+              against: priorLabel,
             })}
             detail={`${formatPercent(pct.netIncome)} of sales`}
             tone={totals.netIncome < 0 ? "danger" : "neutral"}
@@ -173,11 +194,7 @@ export default async function ProfitAndLossPage({
         </StatGrid>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-          <Panel
-            title="Statement"
-            description={`Compared with ${prior.name}`}
-            flush
-          >
+          <Panel title="Statement" description={comparedWith} flush>
             <Statement pnl={pnl} prior={priorPnl} priorName={prior.name} />
           </Panel>
           <div className="grid content-start gap-5">

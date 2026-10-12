@@ -25,8 +25,12 @@ import { amountDelta, pointsDelta } from "@/lib/reporting/compare";
 import {
   comparisonRange,
   formatRangeLabel,
+  periodToDate,
 } from "@/lib/reporting/period-range";
-import { getProfitAndLoss } from "@/lib/reporting/queries";
+import {
+  getLastPostedSalesDay,
+  getProfitAndLoss,
+} from "@/lib/reporting/queries";
 
 import { loadFinancialsContext } from "../financial-health/financials-context";
 import { ActionQueue, buildActions, plural } from "./action-queue";
@@ -41,9 +45,11 @@ export default async function TodayPage() {
   const today = new Date().toLocaleDateString("en-CA", {
     timeZone: "America/New_York",
   });
-  // Period to date; a period that hasn't started yet shows its first day.
+  // Period to date through the last complete day, against the same days of
+  // the prior period; before a full day exists, the period's first day.
   const toDate =
-    range.end < today ? range.end : today < range.start ? range.start : today;
+    periodToDate(range, today, await getLastPostedSalesDay(locationId))
+      .through ?? range.start;
   const prior = comparisonRange(range, periods, toDate);
 
   const supabase = await createClient();
@@ -125,7 +131,7 @@ export default async function TodayPage() {
             label="Net sales"
             value={formatMoney(totals.sales, { cents: false })}
             delta={amountDelta(totals.sales, priorPnl.totals.sales, {
-              against: prior.name,
+              against: `${prior.name} same days`,
             })}
             detail={
               lastDay
