@@ -4,6 +4,7 @@ import {
   type PnlAccountRow,
   type PnlStatement,
 } from "@/lib/reporting/pnl";
+import type { DriverRow, LaborDay } from "@/lib/reporting/sales-drivers";
 import type { CogsSummary, PeriodSummary } from "@/lib/reporting/types";
 
 export async function getPeriods(
@@ -267,4 +268,36 @@ export async function getSalesClassification(
     groups: [...groups.values()].sort((a, b) => b.sales - a.sales),
     mappings: mappings ?? [],
   };
+}
+
+/** Checks, covers and sales per day and per hour, from saved Toast checks. */
+export async function getSalesDrivers(
+  locationId: string,
+  startDate: string,
+  endDate: string,
+): Promise<DriverRow[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("sales_drivers", {
+    target_location_id: locationId,
+    range_start: startDate,
+    range_end: endDate,
+  });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as DriverRow[];
+}
+
+/** Hourly labor pulled from Toast, one row per business day. */
+export async function getLaborDays(
+  locationId: string,
+  startDate: string,
+  endDate: string,
+): Promise<LaborDay[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("toast_labor_days")
+    .select("business_date, wage_cost, regular_hours, overtime_hours")
+    .eq("location_id", locationId)
+    .gte("business_date", startDate)
+    .lte("business_date", endDate);
+  return (data ?? []) as LaborDay[];
 }

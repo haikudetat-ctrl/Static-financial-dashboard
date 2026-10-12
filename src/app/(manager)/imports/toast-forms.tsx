@@ -203,6 +203,8 @@ export function ToastSyncForm({
       result.status === "skipped" && /checks saved/.test(result.message),
   );
   const failed = results.filter((result) => result.status === "failed");
+  const laborDays = results.filter((result) => result.laborCost !== undefined);
+  const laborFailed = results.filter((result) => result.laborFailed);
   const total = datesBetween(from, to).length;
 
   return (
@@ -256,7 +258,20 @@ export function ToastSyncForm({
             {backfilled.length > 0 &&
               ` · detail added to ${backfilled.length} posted day${backfilled.length === 1 ? "" : "s"}`}
             {failed.length > 0 && ` · ${failed.length} failed`}
+            {laborDays.length > 0 &&
+              ` · ${formatMoney(
+                laborDays.reduce(
+                  (sum, result) => sum + (result.laborCost ?? 0),
+                  0,
+                ),
+              )} hourly wages posted`}
           </p>
+          {laborFailed.length > 0 && (
+            <p className="text-[var(--warning)]">
+              Labor didn’t pull for {laborFailed.length}{" "}
+              {laborFailed.length === 1 ? "day" : "days"} — see below.
+            </p>
+          )}
           <ul className="max-h-40 overflow-y-auto text-xs text-[var(--muted)]">
             {results.map((result) => (
               <li key={result.date}>

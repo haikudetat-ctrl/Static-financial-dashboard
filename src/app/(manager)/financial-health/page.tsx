@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 
+import { SalesDollarBar } from "@/components/charts";
 import {
   ButtonLink,
+  DeltaText,
   Callout,
   PageBody,
   Panel,
@@ -15,8 +17,11 @@ import {
   tdNumClass,
   thClass,
   thNumClass,
+  type Delta,
 } from "@/components/ui";
-import { rangeQuery } from "@/lib/reporting/period-range";
+import { amountDelta, pointsDelta } from "@/lib/reporting/compare";
+import { comparisonRange, rangeQuery } from "@/lib/reporting/period-range";
+import { checkCloseReadiness } from "@/lib/reporting/readiness";
 import type { PnlLine, PnlStatement } from "@/lib/reporting/pnl";
 import { getProfitAndLoss } from "@/lib/reporting/queries";
 
@@ -35,10 +40,20 @@ export default async function ProfitAndLossPage({
 }) {
   const loaded = await loadFinancialsContext(searchParams);
   if (!loaded) return null;
-  const { locationId, periods, range } = loaded;
-  const pnl = await getProfitAndLoss(locationId, range.start, range.end);
+  const { context, locationId, periods, range } = loaded;
+  const prior = comparisonRange(range, periods);
+  const [pnl, priorPnl, readiness] = await Promise.all([
+    getProfitAndLoss(locationId, range.start, range.end),
+    getProfitAndLoss(locationId, prior.start, prior.end),
+    range.periodId && range.status !== "closed"
+      ? checkCloseReadiness(context.organizationId!, locationId, range.periodId)
+      : Promise.resolve(null),
+  ]);
   const query = rangeQuery(range);
   const { totals, pct } = pnl;
+  const theoreticalPct = totals.sales
+    ? totals.theoreticalCogs / totals.sales
+    : null;
   const hasSales = totals.sales !== 0;
   const hasInventory = pnl.classCosts.some(
     (c) => c.opening || c.purchases || c.closing,
@@ -61,7 +76,11 @@ export default async function ProfitAndLossPage({
                 href={`/periods/${range.periodId}/readiness`}
                 variant="primary"
               >
-                {range.status === "closed" ? "View close" : "Close period"}
+                {range.status === "closed"
+                  ? "View close"
+                  : readiness
+                    ? `Close period · ${readiness.filter((check) => check.pass).length}/${readiness.length}`
+                    : "Close period"}
               </ButtonLink>
             )}
           </>
@@ -107,30 +126,98 @@ export default async function ProfitAndLossPage({
         )}
 
         <StatGrid>
-          <StatTile label="Net sales" value={formatMoney(totals.sales)} />
+          <StatTile
+            label="Net sales"
+            value={formatMoney(totals.sales)}
+            delta={amountDelta(totals.sales, priorPnl.totals.sales, {
+              against: prior.name,
+            })}
+          />
           <StatTile
             label="Cost of goods"
-            value={formatMoney(totals.cogs)}
-            detail={`${formatPercent(pct.cogs)} of sales · theoretical ${formatMoney(totals.theoreticalCogs)}`}
+            value={formatPercent(pct.cogs)}
+            tone={
+              pct.cogs === null || !theoreticalPct
+                ? "neutral"
+                : pct.cogs - theoreticalPct > 0.005
+                  ? "warning"
+                  : "good"
+            }
+            delta={pointsDelta(pct.cogs, priorPnl.pct.cogs, {
+              lowerIsBetter: true,
+            })}
+            meter={
+              pct.cogs !== null
+                ? { value: pct.cogs, marker: theoreticalPct, max: 0.4 }
+                : undefined
+            }
+            detail={`${formatMoney(totals.cogs)} · recipes say ${formatPercent(theoreticalPct)}`}
           />
           <StatTile
             label="Prime cost"
             value={formatPercent(pct.primeCost)}
-            detail={`${formatMoney(totals.primeCost)} cost of goods + labor`}
+            delta={pointsDelta(pct.primeCost, priorPnl.pct.primeCost, {
+              lowerIsBetter: true,
+            })}
+            detail={`${formatMoney(totals.primeCost)} · labor ${formatPercent(pct.labor)}`}
           />
           <StatTile
             label="Net income"
             value={formatMoney(totals.netIncome)}
+            delta={amountDelta(totals.netIncome, priorPnl.totals.netIncome, {
+              against: prior.name,
+            })}
             detail={`${formatPercent(pct.netIncome)} of sales`}
             tone={totals.netIncome < 0 ? "danger" : "neutral"}
           />
         </StatGrid>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-          <Panel title="Statement" flush>
-            <Statement pnl={pnl} />
+          <Panel
+            title="Statement"
+            description={`Compared with ${prior.name}`}
+            flush
+          >
+            <Statement pnl={pnl} prior={priorPnl} priorName={prior.name} />
           </Panel>
           <div className="grid content-start gap-5">
+            {hasSales && (
+              <Panel
+                title="Where each sales dollar went"
+                description="Cents per $1 of net sales"
+                flush
+              >
+                <SalesDollarBar
+                  parts={[
+                    {
+                      label: "Cost of goods",
+                      value: pct.cogs ?? 0,
+                      className: "bg-[var(--warning)]",
+                    },
+                    {
+                      label: "Labor",
+                      value: pct.labor ?? 0,
+                      className: "bg-[var(--foreground)]",
+                    },
+                    {
+                      label: "Operating expenses",
+                      value: totals.operatingExpenses / totals.sales,
+                      className: "bg-[var(--line-strong)]",
+                    },
+                    {
+                      label: "Other, net",
+                      value: -totals.otherNet / totals.sales,
+                      className: "bg-[var(--muted)]",
+                    },
+                    {
+                      label: "Net income",
+                      value: pct.netIncome ?? 0,
+                      className: "bg-[var(--success)]",
+                    },
+                  ]}
+                />
+              </Panel>
+            )}
             <Panel
               title="Cost of goods by class"
               description="Actual cost from inventory against theoretical cost from recipes."
@@ -228,8 +315,53 @@ export default async function ProfitAndLossPage({
   );
 }
 
-function Statement({ pnl }: { pnl: PnlStatement }) {
+type Compare = {
+  /** Prior amounts by account. */
+  amounts: Map<string, number>;
+};
+
+const thBarClass = `${thClass} hidden w-28 lg:table-cell`;
+const tdBarClass = `${tdClass} hidden w-28 align-middle lg:table-cell`;
+
+/** Share-of-sales bar so outliers stand out without reading every number. */
+function PctBar({ pct, strong }: { pct: number | null; strong?: boolean }) {
+  if (pct === null || pct <= 0) return null;
+  return (
+    <span className="block h-1.5 rounded-full bg-[var(--line)]">
+      <span
+        className={`block h-full rounded-full ${strong ? "bg-[var(--accent)]" : "bg-[var(--foreground)] opacity-70"}`}
+        style={{ width: `${Math.min(pct, 1) * 100}%` }}
+      />
+    </span>
+  );
+}
+
+/** Revenue and income rising is good; every cost rising is not. */
+const higherIsBetter = (line: PnlLine) =>
+  line.type === "revenue" || line.type === "other_income";
+
+function Statement({
+  pnl,
+  prior,
+  priorName,
+}: {
+  pnl: PnlStatement;
+  prior: PnlStatement;
+  priorName: string;
+}) {
   const { totals, pct } = pnl;
+  const compare: Compare = {
+    amounts: new Map(
+      [
+        ...prior.revenue,
+        ...prior.cogs,
+        ...prior.labor,
+        ...prior.operatingExpenses,
+        ...prior.otherIncome,
+        ...prior.otherExpense,
+      ].map((line) => [line.accountId, line.amount]),
+    ),
+  };
   return (
     <TableScroll>
       <table className={tableClass}>
@@ -238,46 +370,80 @@ function Statement({ pnl }: { pnl: PnlStatement }) {
             <th className={thClass}>Account</th>
             <th className={thNumClass}>Amount</th>
             <th className={thNumClass}>% of sales</th>
+            <th className={thNumClass}>vs {priorName}</th>
+            <th className={thBarClass}>
+              <span className="sr-only">Share of sales</span>
+            </th>
           </tr>
         </thead>
         <tbody>
-          <Section title="Sales" lines={pnl.revenue} />
-          <Total label="Net sales" amount={totals.sales} pct={1} />
-          <Section title="Cost of goods sold" lines={pnl.cogs} />
+          <Section title="Sales" lines={pnl.revenue} compare={compare} />
+          <Total
+            label="Net sales"
+            amount={totals.sales}
+            pct={1}
+            delta={amountDelta(totals.sales, prior.totals.sales)}
+          />
+          <Section
+            title="Cost of goods sold"
+            lines={pnl.cogs}
+            compare={compare}
+          />
           <Total
             label="Total cost of goods"
             amount={totals.cogs}
             pct={pct.cogs}
+            delta={pointsDelta(pct.cogs, prior.pct.cogs, {
+              lowerIsBetter: true,
+            })}
           />
           <Total
             label="Gross profit"
             amount={totals.grossProfit}
             pct={pct.grossMargin}
+            delta={pointsDelta(pct.grossMargin, prior.pct.grossMargin)}
             strong
           />
-          <Section title="Labor" lines={pnl.labor} />
-          <Total label="Total labor" amount={totals.labor} pct={pct.labor} />
+          <Section title="Labor" lines={pnl.labor} compare={compare} />
+          <Total
+            label="Total labor"
+            amount={totals.labor}
+            pct={pct.labor}
+            delta={pointsDelta(pct.labor, prior.pct.labor, {
+              lowerIsBetter: true,
+            })}
+          />
           <Total
             label="Prime cost"
             amount={totals.primeCost}
             pct={pct.primeCost}
+            delta={pointsDelta(pct.primeCost, prior.pct.primeCost, {
+              lowerIsBetter: true,
+            })}
             muted
           />
-          <Section title="Operating expenses" lines={pnl.operatingExpenses} />
+          <Section
+            title="Operating expenses"
+            lines={pnl.operatingExpenses}
+            compare={compare}
+          />
           <Total
             label="Operating income"
             amount={totals.operatingIncome}
             pct={pct.operatingIncome}
+            delta={pointsDelta(pct.operatingIncome, prior.pct.operatingIncome)}
             strong
           />
           <Section
             title="Other income and expense"
             lines={[...pnl.otherIncome, ...pnl.otherExpense]}
+            compare={compare}
           />
           <Total
             label="Net income"
             amount={totals.netIncome}
             pct={pct.netIncome}
+            delta={pointsDelta(pct.netIncome, prior.pct.netIncome)}
             strong
           />
         </tbody>
@@ -286,34 +452,55 @@ function Statement({ pnl }: { pnl: PnlStatement }) {
   );
 }
 
-function Section({ title, lines }: { title: string; lines: PnlLine[] }) {
+function Section({
+  title,
+  lines,
+  compare,
+}: {
+  title: string;
+  lines: PnlLine[];
+  compare: Compare;
+}) {
   return (
     <>
       <tr>
         <td
-          colSpan={3}
+          colSpan={5}
           className="border-b bg-[var(--surface)] px-4 pt-3 pb-1.5 text-xs font-semibold text-[var(--muted)]"
         >
           {title}
         </td>
       </tr>
-      {lines.map((line) => (
-        <tr
-          key={line.accountId}
-          className={line.amount === 0 ? "text-[var(--muted)]" : ""}
-        >
-          <td className={`${tdClass} pl-6`}>
-            <span className="mr-2 font-mono text-xs text-[var(--muted)]">
-              {line.code}
-            </span>
-            {line.name}
-          </td>
-          <td className={tdNumClass}>{formatMoney(line.amount)}</td>
-          <td className={tdNumClass}>
-            {line.amount === 0 ? "" : formatPercent(line.pctOfSales)}
-          </td>
-        </tr>
-      ))}
+      {lines.map((line) => {
+        const delta = amountDelta(
+          line.amount,
+          compare.amounts.get(line.accountId) ?? 0,
+          { higherIsBetter: higherIsBetter(line) },
+        );
+        return (
+          <tr
+            key={line.accountId}
+            className={line.amount === 0 ? "text-[var(--muted)]" : ""}
+          >
+            <td className={`${tdClass} pl-6`}>
+              <span className="mr-2 font-mono text-xs text-[var(--muted)]">
+                {line.code}
+              </span>
+              {line.name}
+            </td>
+            <td className={tdNumClass}>{formatMoney(line.amount)}</td>
+            <td className={tdNumClass}>
+              {line.amount === 0 ? "" : formatPercent(line.pctOfSales)}
+            </td>
+            <td className={tdNumClass}>
+              {delta && line.amount !== 0 && <DeltaText delta={delta} />}
+            </td>
+            <td className={tdBarClass}>
+              <PctBar pct={line.pctOfSales} />
+            </td>
+          </tr>
+        );
+      })}
     </>
   );
 }
@@ -322,12 +509,14 @@ function Total({
   label,
   amount,
   pct,
+  delta,
   strong,
   muted,
 }: {
   label: string;
   amount: number;
   pct: number | null;
+  delta?: Delta;
   strong?: boolean;
   muted?: boolean;
 }) {
@@ -335,7 +524,7 @@ function Total({
     <tr
       className={
         strong
-          ? "bg-[var(--surface)] font-semibold"
+          ? "bg-[var(--accent-soft)] font-semibold"
           : muted
             ? "text-[var(--muted)] italic"
             : "font-medium"
@@ -348,6 +537,10 @@ function Total({
         {formatMoney(amount)}
       </td>
       <td className={tdNumClass}>{formatPercent(pct)}</td>
+      <td className={tdNumClass}>{delta && <DeltaText delta={delta} />}</td>
+      <td className={tdBarClass}>
+        <PctBar pct={pct} strong={strong} />
+      </td>
     </tr>
   );
 }

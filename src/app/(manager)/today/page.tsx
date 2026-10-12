@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
 
+import { ClassCostGap, DailySalesBars } from "@/components/charts";
 import {
   Badge,
   ButtonLink,
@@ -17,34 +17,26 @@ import {
   tableClass,
   tdClass,
   tdNumClass,
-  thClass,
-  thNumClass,
   type Tone,
 } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
-import { formatRangeLabel } from "@/lib/reporting/period-range";
-import { countOpenPriceChanges } from "@/lib/purchasing/price-changes";
+import { getAttentionQueues } from "@/lib/reporting/attention";
+import { amountDelta, pointsDelta } from "@/lib/reporting/compare";
+import {
+  comparisonRange,
+  formatRangeLabel,
+} from "@/lib/reporting/period-range";
 import { getProfitAndLoss } from "@/lib/reporting/queries";
 
 import { loadFinancialsContext } from "../financial-health/financials-context";
+import { ActionQueue, buildActions, plural } from "./action-queue";
 
 export const metadata: Metadata = { title: "Today" };
-
-const OPEN_IMPORT_STATUSES = [
-  "received",
-  "extracting",
-  "extracted",
-  "staging",
-  "staged",
-  "mapping",
-  "ready",
-  "failed",
-];
 
 export default async function TodayPage() {
   const loaded = await loadFinancialsContext(Promise.resolve({}));
   if (!loaded) return null;
-  const { context, locationId, range } = loaded;
+  const { context, locationId, periods, range } = loaded;
   const organizationId = context.organizationId!;
   const today = new Date().toLocaleDateString("en-CA", {
     timeZone: "America/New_York",
@@ -52,23 +44,12 @@ export default async function TodayPage() {
   // Period to date; a period that hasn't started yet shows its first day.
   const toDate =
     range.end < today ? range.end : today < range.start ? range.start : today;
+  const prior = comparisonRange(range, periods, toDate);
 
   const supabase = await createClient();
-  const count = (query: PromiseLike<{ count: number | null }>) =>
-    Promise.resolve(query).then((result) => result.count ?? 0);
-
-  const [
-    pnl,
-    salesDays,
-    invoicesToReview,
-    openImports,
-    countsInProgress,
-    catalogReview,
-    unmappedLines,
-    recentInvoices,
-    priceChanges,
-  ] = await Promise.all([
+  const [pnl, priorPnl, salesDays, queues, recentInvoices] = await Promise.all([
     getProfitAndLoss(locationId, range.start, toDate),
+    getProfitAndLoss(locationId, prior.start, prior.end),
     supabase
       .from("sales_business_days")
       .select("business_date, net_sales")
@@ -77,41 +58,7 @@ export default async function TodayPage() {
       .order("business_date", { ascending: false })
       .limit(7)
       .then((result) => result.data ?? []),
-    count(
-      supabase
-        .from("invoices")
-        .select("id", { count: "exact", head: true })
-        .eq("location_id", locationId)
-        .in("status", ["uploaded", "extracted", "reviewed"]),
-    ),
-    count(
-      supabase
-        .from("source_imports")
-        .select("id", { count: "exact", head: true })
-        .eq("location_id", locationId)
-        .in("status", OPEN_IMPORT_STATUSES),
-    ),
-    count(
-      supabase
-        .from("inventory_counts")
-        .select("id", { count: "exact", head: true })
-        .eq("location_id", locationId)
-        .in("status", ["draft", "in_progress", "counted"]),
-    ),
-    count(
-      supabase
-        .from("catalog_review_items")
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", organizationId)
-        .eq("status", "open"),
-    ),
-    count(
-      supabase
-        .from("invoice_lines")
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", organizationId)
-        .is("inventory_item_id", null),
-    ),
+    getAttentionQueues(organizationId, locationId),
     supabase
       .from("invoices")
       .select(
@@ -119,74 +66,49 @@ export default async function TodayPage() {
       )
       .eq("location_id", locationId)
       .order("created_at", { ascending: false })
-      .limit(6)
+      .limit(5)
       .then((result) => result.data ?? []),
-    countOpenPriceChanges(organizationId, locationId),
   ]);
 
-  const queues: Array<{
-    label: string;
-    detail: string;
-    count: number;
-    href: string;
-    tone: Tone;
-  }> = [
-    {
-      label: "Invoices to review",
-      detail: "Check extracted lines and approve to post costs",
-      count: invoicesToReview,
-      href: "/invoices/upload",
-      tone: "warning",
-    },
-    {
-      label: "Price changes",
-      detail: "Invoice prices that moved 5% or more",
-      count: priceChanges,
-      href: "/purchasing/price-changes",
-      tone: "warning",
-    },
-    {
-      label: "Imports not posted",
-      detail: "Toast exports waiting to post to sales",
-      count: openImports,
-      href: "/imports",
-      tone: "warning",
-    },
-    {
-      label: "Counts open",
-      detail: "Counts started but not yet approved",
-      count: countsInProgress,
-      href: "/inventory",
-      tone: "accent",
-    },
-    {
-      label: "Invoice lines without an item",
-      detail: "Lines that can't cost inventory until mapped",
-      count: unmappedLines,
-      href: "/exceptions",
-      tone: "warning",
-    },
-    {
-      label: "Catalog questions",
-      detail: "Items from the workbook import that need a decision",
-      count: catalogReview,
-      href: "/exceptions/catalog-review",
-      tone: "neutral",
-    },
-  ];
-  const openQueues = queues.filter((queue) => queue.count > 0);
+  const { actions, cleared } = buildActions(queues, pnl);
+  const { totals, pct } = pnl;
+  const theoreticalPct = totals.sales
+    ? totals.theoreticalCogs / totals.sales
+    : null;
+  const gap =
+    pct.cogs !== null && theoreticalPct !== null && totals.theoreticalCogs
+      ? pct.cogs - theoreticalPct
+      : null;
+  const gapTone: Tone =
+    gap === null
+      ? "neutral"
+      : gap > 0.02
+        ? "danger"
+        : gap > 0.005
+          ? "warning"
+          : "good";
   const lastDay = salesDays[0];
   const dateLabel = new Date(`${today}T12:00:00`).toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",
   });
+  const started = today >= range.start;
 
   return (
     <>
       <PageHeader
-        title="Today"
-        description={dateLabel}
+        eyebrow={dateLabel}
+        title={
+          actions.length === 0
+            ? "All clear — nothing needs you"
+            : `${plural(actions.length, "thing needs", "things need")} you`
+        }
+        description={
+          started
+            ? `${range.name ?? "Period"} to date · ${formatRangeLabel(range.start, toDate)} · compared with the same days of ${prior.name}`
+            : `${range.name ?? "Next period"} starts ${formatRangeLabel(range.start, range.end)}`
+        }
         actions={
           <>
             <ButtonLink href="/imports">Upload sales</ButtonLink>
@@ -198,116 +120,83 @@ export default async function TodayPage() {
         }
       />
       <PageBody>
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-sm font-semibold">
-            {today < range.start
-              ? `${range.name ?? "Next period"} starts ${new Date(
-                  `${range.start}T12:00:00`,
-                ).toLocaleDateString("en-US", {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                })}`
-              : `${range.name ?? "Period"} to date`}
-            <span className="ml-2 font-normal text-[var(--muted)]">
-              {today < range.start
-                ? range.label
-                : formatRangeLabel(range.start, toDate)}
-            </span>
-          </h2>
-          <Link
-            href="/financial-health"
-            className="text-xs font-medium text-[var(--accent-strong)] hover:underline"
-          >
-            Full P&amp;L
-          </Link>
-        </div>
         <StatGrid>
           <StatTile
             label="Net sales"
-            value={formatMoney(pnl.totals.sales, { cents: false })}
-            href="/financial-health"
-          />
-          <StatTile
-            label="Cost of goods"
-            value={formatPercent(pnl.pct.cogs)}
-            detail={`${formatMoney(pnl.totals.cogs, { cents: false })} · estimated until close`}
-            href="/financial-health"
-          />
-          <StatTile
-            label="Prime cost"
-            value={formatPercent(pnl.pct.primeCost)}
-            detail="Cost of goods + labor"
-            href="/financial-health"
-          />
-          <StatTile
-            label="Last sales day"
-            value={
-              lastDay
-                ? formatMoney(Number(lastDay.net_sales), { cents: false })
-                : "—"
-            }
+            value={formatMoney(totals.sales, { cents: false })}
+            delta={amountDelta(totals.sales, priorPnl.totals.sales, {
+              against: prior.name,
+            })}
             detail={
               lastDay
-                ? new Date(
+                ? `Last day ${formatMoney(Number(lastDay.net_sales), { cents: false })} · ${new Date(
                     `${lastDay.business_date}T12:00:00`,
                   ).toLocaleDateString("en-US", {
                     weekday: "short",
                     month: "short",
                     day: "numeric",
-                  })
+                  })}`
                 : "No Toast sales posted yet"
             }
-            href="/imports"
+            href="/financial-health"
+          />
+          <StatTile
+            label="Cost of goods"
+            value={formatPercent(pct.cogs)}
+            tone={gap === null ? "neutral" : gap > 0.005 ? "warning" : "good"}
+            delta={pointsDelta(pct.cogs, priorPnl.pct.cogs, {
+              lowerIsBetter: true,
+            })}
+            meter={
+              pct.cogs !== null
+                ? { value: pct.cogs, marker: theoreticalPct, max: 0.4 }
+                : undefined
+            }
+            detail={`Recipes say ${formatPercent(theoreticalPct)} · estimated until close`}
+            href="/financial-health"
+          />
+          <StatTile
+            label="Prime cost"
+            value={formatPercent(pct.primeCost)}
+            delta={pointsDelta(pct.primeCost, priorPnl.pct.primeCost, {
+              lowerIsBetter: true,
+            })}
+            detail={`Cost of goods ${formatPercent(pct.cogs)} + labor ${formatPercent(pct.labor)}`}
+            href="/financial-health"
+          />
+          <StatTile
+            label="Actual vs recipes"
+            value={
+              gap === null
+                ? "—"
+                : `${gap > 0 ? "+" : gap < 0 ? "−" : ""}${Math.abs(gap * 100).toFixed(1)} pts`
+            }
+            tone={gapTone}
+            detail={
+              gap === null
+                ? "Map Toast items to recipes to measure"
+                : `${formatMoney(Math.abs(totals.cogs - totals.theoreticalCogs), { cents: false })} ${gap > 0 ? "over" : "under"} recipe cost`
+            }
+            href="/inventory/variance"
           />
         </StatGrid>
 
-        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <Panel
-            title="Needs attention"
-            actions={
-              openQueues.length > 0 ? (
-                <Badge tone="warning">{openQueues.length} open</Badge>
-              ) : (
-                <Badge tone="good">All clear</Badge>
-              )
-            }
-            flush
-          >
-            <ul>
-              {queues.map((queue) => (
-                <li key={queue.label} className="border-b last:border-b-0">
-                  <Link
-                    href={queue.href}
-                    className="flex items-center gap-3 px-4 py-3 transition hover:bg-[var(--surface)]"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p
-                        className={`text-sm font-medium ${queue.count ? "" : "text-[var(--muted)]"}`}
-                      >
-                        {queue.label}
-                      </p>
-                      <p className="text-xs text-[var(--muted)]">
-                        {queue.detail}
-                      </p>
-                    </div>
-                    {queue.count > 0 ? (
-                      <Badge tone={queue.tone}>{queue.count}</Badge>
-                    ) : (
-                      <span className="text-xs text-[var(--muted)]">None</span>
-                    )}
-                    <ChevronRight
-                      aria-hidden="true"
-                      className="size-4 text-[var(--muted)]"
-                    />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </Panel>
+        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <ActionQueue actions={actions} cleared={cleared} />
 
           <div className="grid gap-5">
-            <Panel title="Recent sales days" flush>
+            <Panel
+              title="Net sales · last 7 days"
+              actions={
+                <Link
+                  href="/financial-health"
+                  className="text-xs font-medium text-[var(--accent-strong)] hover:underline"
+                >
+                  Full P&amp;L
+                </Link>
+              }
+              flush
+            >
               {salesDays.length === 0 ? (
                 <EmptyState
                   title="No sales posted yet"
@@ -319,35 +208,20 @@ export default async function TodayPage() {
                   }
                 />
               ) : (
-                <TableScroll>
-                  <table className={tableClass}>
-                    <thead>
-                      <tr>
-                        <th className={thClass}>Business day</th>
-                        <th className={thNumClass}>Net sales</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {salesDays.map((day) => (
-                        <tr key={day.business_date}>
-                          <td className={tdClass}>
-                            {new Date(
-                              `${day.business_date}T12:00:00`,
-                            ).toLocaleDateString("en-US", {
-                              weekday: "short",
-                              month: "short",
-                              day: "numeric",
-                            })}
-                          </td>
-                          <td className={tdNumClass}>
-                            {formatMoney(Number(day.net_sales))}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </TableScroll>
+                <DailySalesBars
+                  days={[...salesDays].reverse().map((day) => ({
+                    date: day.business_date,
+                    sales: Number(day.net_sales),
+                  }))}
+                />
               )}
+            </Panel>
+            <Panel
+              title="Cost of goods by class"
+              description="● actual   ○ recipes — the gap is what to chase"
+              flush
+            >
+              <ClassCostGap classes={pnl.classCosts} />
             </Panel>
             <Panel
               title="Recent invoices"

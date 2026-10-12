@@ -7,6 +7,7 @@ import { localToday } from "@/lib/inventory/count-period";
 import { getPrimaryLocation } from "@/lib/inventory/queries";
 import { createClient } from "@/lib/supabase/server";
 import { TOAST_HOSTS } from "@/lib/toast/api";
+import { syncToastLaborDay } from "@/lib/toast/labor";
 import {
   addDays,
   loadToastCredentials,
@@ -32,6 +33,7 @@ async function requireManager() {
 function refresh() {
   revalidatePath("/imports");
   revalidatePath("/recipes/sales");
+  revalidatePath("/financial-health", "layout");
 }
 
 const errorMessage = (error: unknown) =>
@@ -90,6 +92,9 @@ export type ToastDayResult = {
   status: string;
   message: string;
   netSales: number;
+  /** Hourly wages posted for the day, when labor was pulled. */
+  laborCost?: number;
+  laborFailed?: boolean;
 };
 
 /**
@@ -119,11 +124,23 @@ export async function pullToastDayAction(
       };
     }
     const result = await syncToastDay(credentials, date, { trigger: "manual" });
+    if (result.status === "failed") {
+      return {
+        date,
+        status: result.status,
+        message: result.message,
+        netSales: result.netSales,
+      };
+    }
+    // Labor rides along; a labor failure doesn't undo the day's sales.
+    const labor = await syncToastLaborDay(credentials, date);
     return {
       date,
       status: result.status,
-      message: result.message,
+      message: `${result.message} · ${labor.message}`,
       netSales: result.netSales,
+      laborCost: labor.ok ? labor.wageCost : undefined,
+      laborFailed: !labor.ok,
     };
   } catch (error) {
     return {

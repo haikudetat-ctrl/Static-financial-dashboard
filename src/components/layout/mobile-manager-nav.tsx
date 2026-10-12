@@ -4,17 +4,24 @@ import { Menu, X } from "lucide-react";
 import { useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
+import { CommandMenu } from "@/components/layout/command-menu";
 import {
   AccountFooter,
   ManagerNavList,
+  PeriodProgressCard,
+  type PeriodProgress,
 } from "@/components/layout/manager-sidebar";
 
 export function MobileManagerNav({
   organization,
   email,
+  counts,
+  period,
 }: {
   organization: string | null;
   email: string;
+  counts?: Record<string, number>;
+  period?: PeriodProgress | null;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -25,15 +32,18 @@ export function MobileManagerNav({
         <p className="min-w-0 truncate px-3 text-sm font-semibold">
           {organization ?? "Static OS"}
         </p>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="inline-flex size-9 items-center justify-center rounded-md border bg-[var(--surface-strong)]"
-          aria-label="Open navigation"
-          aria-expanded={open}
-        >
-          <Menu size={18} strokeWidth={1.8} />
-        </button>
+        <div className="flex items-center gap-2">
+          <CommandMenu compact />
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="inline-flex size-9 items-center justify-center rounded-md border bg-[var(--surface-strong)]"
+            aria-label="Open navigation"
+            aria-expanded={open}
+          >
+            <Menu size={18} strokeWidth={1.8} />
+          </button>
+        </div>
       </header>
       {open && (
         <div
@@ -60,8 +70,17 @@ export function MobileManagerNav({
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <ManagerNavList onNavigate={() => setOpen(false)} />
+              <ManagerNavList
+                counts={counts}
+                onNavigate={() => setOpen(false)}
+              />
             </div>
+            {period && (
+              <PeriodProgressCard
+                period={period}
+                onNavigate={() => setOpen(false)}
+              />
+            )}
             <AccountFooter email={email} />
           </div>
         </div>

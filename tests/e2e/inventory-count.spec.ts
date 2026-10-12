@@ -50,17 +50,14 @@ test("full count moves from manager setup to staff entry and ledger posting", as
   for (const itemName of ["Bourbon 750 ml", "Gin 750 ml"]) {
     const form = page.locator("form").filter({ hasText: itemName });
     await form.getByLabel("Quantity").fill("1");
-    await form
-      .locator('select[name="counted_tenths"]')
-      .selectOption({ label: "5/10" });
-    await form
-      .getByLabel("Include the bottle tenths above", { exact: true })
-      .check();
-    await form.getByRole("button", { name: "Save item" }).click();
+    await form.getByText(".5", { exact: true }).click();
+    await form.getByRole("button", { name: /^Save 1\.5/ }).click();
+    // Counted items fold to a single row with an Edit button.
     await expect(
-      page.locator("form").filter({ hasText: itemName }).getByText("counted", {
-        exact: true,
-      }),
+      page
+        .locator("section div")
+        .filter({ hasText: itemName })
+        .getByRole("button", { name: "Edit" }),
     ).toBeVisible();
   }
 

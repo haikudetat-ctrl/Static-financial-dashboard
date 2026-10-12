@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 import { localToday } from "@/lib/inventory/count-period";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  lastLaborDate,
+  syncToastLaborDay,
+  type LaborSyncResult,
+} from "@/lib/toast/labor";
+import {
   datesToSync,
   loadToastCredentials,
   openToastSession,
@@ -14,8 +19,8 @@ import {
 export const maxDuration = 300;
 
 /**
- * Nightly Toast sales sync, called by Vercel Cron. Pulls yesterday (and
- * any days missed in the last week) for every connected location.
+ * Nightly Toast sync, called by Vercel Cron. Pulls yesterday's sales and
+ * labor (and any days missed in the last week) for every connected location.
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -33,11 +38,20 @@ export async function GET(request: Request) {
   }
 
   const today = localToday();
-  const report: Array<{ locationId: string; results: ToastSyncResult[] }> = [];
+  const report: Array<{
+    locationId: string;
+    results: ToastSyncResult[];
+    labor: LaborSyncResult[];
+  }> = [];
   for (const connection of connections ?? []) {
     const results: ToastSyncResult[] = [];
+    const labor: LaborSyncResult[] = [];
     const dates = datesToSync(connection.last_synced_date, today);
-    if (dates.length) {
+    const laborDates = datesToSync(
+      await lastLaborDate(admin, connection.location_id),
+      today,
+    );
+    if (dates.length || laborDates.length) {
       const credentials = await loadToastCredentials(
         connection.location_id,
         admin,
@@ -59,9 +73,17 @@ export async function GET(request: Request) {
           // Stop at the first failure so the next run retries from there.
           if (result.status === "failed") break;
         }
+        for (const date of laborDates) {
+          const result = await syncToastLaborDay(credentials, date, {
+            admin,
+            session,
+          });
+          labor.push(result);
+          if (!result.ok) break;
+        }
       }
     }
-    report.push({ locationId: connection.location_id, results });
+    report.push({ locationId: connection.location_id, results, labor });
   }
 
   return NextResponse.json({ today, report });

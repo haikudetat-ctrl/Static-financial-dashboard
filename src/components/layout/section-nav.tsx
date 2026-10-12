@@ -1,48 +1,16 @@
 import { SectionTabs } from "@/components/ui";
-
-const SECTIONS = {
-  purchasing: [
-    { label: "Orders", href: "/purchasing" },
-    { label: "Suggested order", href: "/purchasing/suggested-order" },
-    { label: "Order guide", href: "/purchasing/order-guide" },
-    { label: "Price changes", href: "/purchasing/price-changes" },
-    { label: "Receiving", href: "/receiving/review" },
-    { label: "Reports", href: "/purchasing/reports" },
-  ],
-  recipes: [
-    { label: "Recipes", href: "/recipes" },
-    { label: "Ingredients", href: "/recipes/ingredients" },
-    { label: "Menu mappings", href: "/recipes/mappings" },
-    { label: "Sales", href: "/recipes/sales" },
-    { label: "Theoretical usage", href: "/recipes/theoretical-usage" },
-  ],
-  inventory: [
-    { label: "Overview", href: "/inventory" },
-    { label: "Counts", href: "/inventory/counts" },
-    { label: "Variance", href: "/inventory/variance" },
-    { label: "On hand", href: "/inventory/on-hand" },
-  ],
-  imports: [
-    { label: "Uploads & Toast", href: "/imports" },
-    { label: "Drive inbox", href: "/imports/drive" },
-  ],
-  exceptions: [
-    { label: "Overview", href: "/exceptions" },
-    { label: "Negative inventory", href: "/exceptions/negative-inventory" },
-    { label: "Catalog review", href: "/exceptions/catalog-review" },
-  ],
-} as const;
+import { sectionNavigation } from "@/lib/navigation";
 
 export function SectionNav({
   section,
   active,
 }: {
-  section: keyof typeof SECTIONS;
+  section: keyof typeof sectionNavigation;
   active: string;
 }) {
   return (
     <SectionTabs
-      items={SECTIONS[section].map((item) => ({
+      items={sectionNavigation[section].map((item) => ({
         ...item,
         active: item.href === active,
       }))}
