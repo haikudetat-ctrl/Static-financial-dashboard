@@ -16,6 +16,8 @@ import {
   thNumClass,
 } from "@/components/ui";
 import { getUserContext } from "@/lib/auth/session";
+import { getMatchingOptions } from "@/lib/invoices/line-suggestions";
+import { guessPack, suggestItemName } from "@/lib/invoices/new-item";
 import { getInvoiceDetail, relatedName } from "@/lib/purchasing/queries";
 import { getPeriods } from "@/lib/reporting/queries";
 import { formatPeriodLabel } from "@/lib/reporting/period-range";
@@ -59,6 +61,14 @@ export default async function InvoiceReviewPage({
   const unmatched = invoice.lines.filter(
     (line) => !line.inventory_item_id,
   ).length;
+  const matching =
+    editable && unmatched > 0
+      ? await getMatchingOptions(
+          invoice.id,
+          invoice.vendor_id,
+          context.organizationId,
+        )
+      : null;
   const period = periods.find(
     (candidate) =>
       candidate.status !== "closed" &&
@@ -135,7 +145,7 @@ export default async function InvoiceReviewPage({
           >
             {undated
               ? "This vendor's file had no date. It decides whether the delivery counts toward a period."
-              : "Match each line once; the vendor's code is remembered for future invoices."}
+              : "Use the suggested item, search for one, or add a new item. Each match is remembered for this vendor's next invoice."}
           </Callout>
         ) : editable ? (
           <Callout
@@ -207,6 +217,31 @@ export default async function InvoiceReviewPage({
                             source={line.match_source}
                             items={itemOptions}
                             editable={editable}
+                            suggestions={matching?.suggestions[line.id] ?? []}
+                            newItem={
+                              matching && !line.inventory_item_id
+                                ? {
+                                    description: line.product_description,
+                                    packSize: line.pack_size,
+                                    invoiceUnit: line.purchase_unit_text,
+                                    defaults: {
+                                      name: suggestItemName(
+                                        line.product_description,
+                                      ),
+                                      cogsClass: matching.defaultCogsClass,
+                                      pack: guessPack(
+                                        line.pack_size,
+                                        matching.units,
+                                      ),
+                                    },
+                                    options: {
+                                      categories: matching.categories,
+                                      units: matching.units,
+                                      cogsClasses: matching.cogsClasses,
+                                    },
+                                  }
+                                : null
+                            }
                           />
                         </td>
                         <td className={tdNumClass}>
