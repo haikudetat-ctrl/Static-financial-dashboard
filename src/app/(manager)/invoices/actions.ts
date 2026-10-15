@@ -470,6 +470,58 @@ export async function setInvoiceDateAction(
   return { ok: true };
 }
 
+export type NewItemFromLineInput = {
+  name: string;
+  categoryId: string | null;
+  cogsClass: string;
+  countUnitId: string;
+  countUnitsPerInvoiceUnit: number;
+};
+
+const COGS_CLASSES = new Set([
+  "liquor",
+  "wine",
+  "beer",
+  "na_bev",
+  "bar_consumables",
+  "food",
+]);
+
+/**
+ * Creates an inventory item from an unmatched invoice line and matches the
+ * line to it. The vendor's code and pack size are saved with it, so the next
+ * invoice matches on its own and receiving knows how much one unit holds.
+ */
+export async function addItemFromInvoiceLineAction(
+  invoiceId: string,
+  lineId: string,
+  input: NewItemFromLineInput,
+): Promise<{ ok: true; itemId: string } | { ok: false; error: string }> {
+  await requireManager();
+  const name = input.name.trim();
+  const perUnit = Number(input.countUnitsPerInvoiceUnit);
+  if (!name) return { ok: false, error: "Name the item." };
+  if (!COGS_CLASSES.has(input.cogsClass)) {
+    return { ok: false, error: "Pick a cost class." };
+  }
+  if (!input.countUnitId) return { ok: false, error: "Pick a count unit." };
+  if (!(perUnit > 0)) {
+    return { ok: false, error: "Say how much one invoice unit holds." };
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("create_item_from_invoice_line", {
+    target_line_id: lineId,
+    item_name: name,
+    target_category_id: input.categoryId || null,
+    target_cogs_class: input.cogsClass,
+    target_count_unit_id: input.countUnitId,
+    count_units_per_invoice_unit: perUnit,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidateInvoices(invoiceId);
+  return { ok: true, itemId: data as string };
+}
+
 /** Matches one invoice line to an item; the vendor's code is learned. */
 export async function matchInvoiceLineAction(
   invoiceId: string,
